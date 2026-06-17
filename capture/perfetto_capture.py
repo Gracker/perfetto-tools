@@ -14,6 +14,13 @@ import tempfile
 import time
 from pathlib import Path
 
+if sys.version_info < (3, 9):
+    sys.exit(
+        "perfetto_capture.py requires Python 3.9+ "
+        f"(running {sys.version.split()[0]}). "
+        "The script uses str.removesuffix() and dataclass features added in 3.9."
+    )
+
 
 class ConfigError(Exception):
     pass

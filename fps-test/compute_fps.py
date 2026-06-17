@@ -41,6 +41,16 @@ Frame sources & quality signals:
     layer-attributed buffer events.)
 """
 from __future__ import annotations
+
+import sys
+
+if sys.version_info < (3, 9):
+    sys.exit(
+        "compute_fps.py requires Python 3.9+ "
+        f"(running {sys.version.split()[0]}). "
+        "Uses str.removesuffix() and dataclass features added in 3.9."
+    )
+
 from dataclasses import dataclass, field
 
 

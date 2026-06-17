@@ -141,3 +141,20 @@ device resolution (defaults target ~1264×2800). Format per line:
 - Python 3.9+ with `pip install perfetto` (trace_processor).
 - The archived official script at `../official/` (included).
 - FrameTimeline needs Android 12 (API 31)+.
+
+## Known limitations / implementation status
+
+- **FPS is sourced from FrameTimeline only.** `compute_fps.py` groups
+  `actual_frame_timeline_slice` rows by `layer_name` to produce per-source FPS.
+  The code also contains `detect_overwrite_drops()` /
+  `buffer_events_to_frames()` — a *tested library* for per-layer BufferQueue
+  (`frame_slice`) analysis, including TextureView single-buffer overwrite
+  detection — but **it is not wired into `analyze_trace`**, because every device
+  tested (6 real-device traces across TextureView/SurfaceView/AOSP/Flutter
+  scenarios) has an **empty `frame_slice` table**. Those surfaces still get
+  per-source FPS via their FrameTimeline `layer_name` attribution; only the
+  BufferQueue-specific overwrite signal is unavailable.
+- **No single-buffer overwrite reporting** as a consequence of the above. The
+  drop/jank counts come from FrameTimeline's `present_type`/`jank_type`, which
+  already capture most cases; the BufferQueue path would only add coverage for
+  surfaces that FrameTimeline doesn't attribute a layer to.
