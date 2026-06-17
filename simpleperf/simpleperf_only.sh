@@ -32,8 +32,21 @@ echo "[simpleperf] pid     : ${PID}"
 
 echo "[simpleperf] recording..."
 # -g: callchain based. (Add --trace-offcpu for off-cpu time if desired.)
-if ! adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}"; then
-  echo "ERROR: simpleperf record failed. Is the app debuggable? (or run 'adb root')" >&2
+# Captures both stdout+stderr so we can match simpleperf's own diagnostic line
+# and give a precise reason instead of a generic "is the app debuggable?".
+if ! SP_OUT=$(adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>&1); then
+  echo "${SP_OUT}" | tr -d '\r' >&2
+  echo "" >&2
+  echo "ERROR: simpleperf record failed." >&2
+  if echo "${SP_OUT}" | grep -q "not supported on the device"; then
+    echo "" >&2
+    echo "This is typically a SELinux / build-type limit, NOT a 'not debuggable' problem:" >&2
+    echo "  - 'user' builds block perf_event_open for untrusted apps even when the" >&2
+    echo "    app is debuggable and perf_event_paranoid is -1." >&2
+    echo "  - Fix: use a 'userdebug'/'eng' build, or 'adb root' on an engineering device." >&2
+    echo "  - Alternative: Perfetto can capture CPU sampling in one trace via the" >&2
+    echo "    'linux.perf' datasource (no separate perf_event_open from simpleperf)." >&2
+  fi
   exit 1
 fi
 

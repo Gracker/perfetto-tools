@@ -44,8 +44,10 @@ cleanup() {
 trap cleanup EXIT
 
 # 1. simpleperf in the background.
+# Captures its stderr so the post-failure diagnostic below can match simpleperf's
+# own "not supported on the device" line and give a precise reason.
 echo "[combined] starting simpleperf (background)..."
-adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" &
+adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>"${OUT_DIR}/${TS}_sp.stderr" &
 SP_PID=$!
 
 # 2. Perfetto trace in the foreground, same duration. --no-open so it returns.
@@ -54,11 +56,26 @@ echo "[combined] starting perfetto trace (${DURATION}s)..."
 
 # 3. Wait for simpleperf to finish.
 echo "[combined] waiting for simpleperf to finish..."
-wait "${SP_PID}" || {
-  echo "ERROR: simpleperf failed. App debuggable? (or 'adb root')" >&2
-  exit 1
-}
+SP_RC=0
+wait "${SP_PID}" || SP_RC=$?
 SP_PID=""  # reaped; stop the trap from re-waiting
+if [[ "${SP_RC}" -ne 0 ]]; then
+  cat "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null | tr -d '\r' >&2
+  echo "" >&2
+  echo "ERROR: simpleperf failed." >&2
+  if grep -q "not supported on the device" "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null; then
+    echo "" >&2
+    echo "This is typically a SELinux / build-type limit, NOT a 'not debuggable' problem:" >&2
+    echo "  - 'user' builds block perf_event_open for untrusted apps even when the" >&2
+    echo "    app is debuggable and perf_event_paranoid is -1." >&2
+    echo "  - Fix: use a 'userdebug'/'eng' build, or 'adb root' on an engineering device." >&2
+    echo "  - Alternative: Perfetto can capture CPU sampling in one trace via the" >&2
+    echo "    'linux.perf' datasource (no separate perf_event_open from simpleperf)." >&2
+  fi
+  rm -f "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null || true
+  exit 1
+fi
+rm -f "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null || true
 
 adb pull "${REMOTE}" "${LOCAL}"
 adb shell rm -f "${REMOTE}"
