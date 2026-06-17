@@ -9,6 +9,10 @@
 # 'dump'  writes gfxinfo framestats and per-layer SurfaceFlinger latency to files.
 # These corroborate (not replace) the trace's per-source FPS: gfxinfo is whole-
 # process, SurfaceFlinger --latency is per-layer, the trace is per-source.
+#
+# Note: on Android 14+ (API 34+) SurfaceFlinger --latency no longer emits per-frame
+# rows (only a single vsync-interval line). On those versions the sflatency file
+# carries a notice and points to the trace's FrameTimeline for per-layer timing.
 set -euo pipefail
 
 MODE="${1:?Usage: $0 reset|dump <package> [out_dir]}"
@@ -34,23 +38,38 @@ case "${MODE}" in
     SF="${OUT_DIR}/sflatency_${PKG}_${TS}.txt"
 
     # 1. Whole-process frame stats (Total frames, Janky frames, percentiles, CSV).
+    #    Works on all Android versions with a gfxinfo-supporting app.
     "$ADB" shell dumpsys gfxinfo "${PKG}" framestats > "${GFX}"
     echo "[gfxinfo] framestats -> ${GFX}"
 
-    # 2. Per-layer present timestamps. Layer names look like
-    #    'SurfaceView[pkg/Activity]#0' or 'pkg/Activity#0'. dumpsys SurfaceFlinger
-    #    --list enumerates them; --latency <layer> prints 3-column
-    #    (desired, actual-present, frame-ready) ns rows for that layer.
-    LAYERS="$("$ADB" shell dumpsys SurfaceFlinger --list | tr -d '\r' | grep -F "${PKG}" || true)"
+    # 2. Per-layer present timestamps via SurfaceFlinger --latency.
+    #    On older Android this emits 3-column (desired, actual-present,
+    #    frame-ready) ns rows per layer. On API 34+ it only prints a single
+    #    vsync-interval number, so we detect that and write a notice instead of a
+    #    misleading near-empty file.
+    LAYERS="$("$ADB" shell dumpsys SurfaceFlinger --list </dev/null | tr -d '\r' | grep -F "${PKG}" || true)"
+    : > "${SF}"
     if [[ -z "${LAYERS}" ]]; then
       echo "[gfxinfo] no SurfaceFlinger layers matched ${PKG}; skipping --latency" >&2
+      echo "# No SurfaceFlinger layers matched ${PKG} at dump time." >> "${SF}"
     else
-      : > "${SF}"
       while IFS= read -r layer; do
         [[ -z "${layer}" ]] && continue
+        # Capture this layer's latency output, then decide if it's meaningful.
+        LAT_OUT="$("$ADB" shell dumpsys SurfaceFlinger --latency "${layer}" </dev/null | tr -d '\r')"
+        # Count non-empty rows. A single vsync line (just a number) means the new
+        # API shape with no per-frame data.
+        ROW_COUNT=$(printf '%s\n' "${LAT_OUT}" | grep -c '[0-9]')
         {
           echo "=== layer: ${layer} ==="
-          "$ADB" shell dumpsys SurfaceFlinger --latency "${layer}"
+          if [[ "${ROW_COUNT}" -le 1 ]]; then
+            echo "# (no per-frame rows on this Android version; --latency only"
+            echo "#  returns a vsync-interval here. For per-layer present timing,"
+            echo "#  read actual_frame_timeline_slice in the Perfetto trace.)"
+            echo "${LAT_OUT}"
+          else
+            echo "${LAT_OUT}"
+          fi
           echo ""
         } >> "${SF}"
       done <<< "${LAYERS}"
