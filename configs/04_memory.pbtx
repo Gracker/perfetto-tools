@@ -1,0 +1,30 @@
+# Memory investigation trace.
+# Memory counters (RSS/PSS polled), low-memory-killer events.
+duration_ms: 10000
+buffers { size_kb: 65536  fill_policy: DISCARD }
+data_sources {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            ftrace_events: "sched/sched_switch"
+            ftrace_events: "kmem/kmem_mm_page_alloc"
+            ftrace_events: "compaction/mm_compaction_begin"
+            ftrace_events: "oom/oom_score_adj_update"
+        }
+    }
+}
+data_sources {
+    config {
+        name: "linux.process_stats"
+        process_stats_config {
+            proc_stats_poll_ms: 1000
+            record_thread_names: true
+        }
+    }
+}
+data_sources {
+    config {
+        name: "linux.system_info"
+        target_buffer: 0
+    }
+}

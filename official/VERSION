@@ -1,0 +1,11 @@
+source: https://raw.githubusercontent.com/google/perfetto/master/tools/record_android_trace
+repo:  https://github.com/google/perfetto
+commit: db10888e1839
+snapshot_date: 2026-06-17
+
+To update:
+  curl -fL https://raw.githubusercontent.com/google/perfetto/master/tools/record_android_trace \
+    -o official/record_android_trace
+  chmod +x official/record_android_trace
+  # then refresh the commit hash and date in this file
+  # (get the hash from: curl -fsSL https://api.github.com/repos/google/perfetto/commits/master)

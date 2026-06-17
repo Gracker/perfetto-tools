@@ -1,0 +1,19 @@
+# Trace outputs
+traces/*
+!traces/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# simpleperf outputs
+*.data
+perf_report.html
+
+# Spike scratch (local only)
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db

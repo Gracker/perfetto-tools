@@ -1,0 +1,31 @@
+# Full / kitchen-sink trace for debugging. Large output. Big buffer.
+duration_ms: 10000
+buffers { size_kb: 262144  fill_policy: DISCARD }
+data_sources {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            ftrace_events: "sched/sched_switch"
+            ftrace_events: "sched/sched_wakeup_new"
+            ftrace_events: "sched/sched_process_exit"
+            ftrace_events: "sched/sched_stat_runtime"
+            ftrace_events: "power/cpu_frequency"
+            ftrace_events: "power/cpu_idle"
+            ftrace_events: "power/suspend_resume"
+            ftrace_events: "kmem/kmem_mm_page_alloc"
+            atrace_categories: "am"
+            atrace_categories: "wm"
+            atrace_categories: "gfx"
+            atrace_categories: "view"
+            atrace_categories: "input"
+            atrace_categories: "sched"
+            atrace_categories: "binder_driver"
+            atrace_categories: "dalvik"
+            atrace_apps: "*"
+        }
+    }
+}
+data_sources { config { name: "linux.process_stats" } }
+data_sources { config { name: "linux.system_info" } }
+data_sources { config { name: "android.surfaceflinger.frametimeline" } }
+data_sources { config { name: "android.input.inputevent" } }

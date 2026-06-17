@@ -1,0 +1,40 @@
+# Jank / scroll smoothness trace.
+# Used by fps-test/run_fps_test.sh.
+#
+# Includes:
+#  - android.surfaceflinger.frametimeline : authoritative per-layer frame timing +
+#    jank/drop. Populates actual_frame_timeline_slice (the FPS source). Android 12+.
+#  - android.input.inputevent             : structured input events (action), present
+#    on debuggable/userdebug/eng builds. Used to derive precise fling windows.
+#  - `input` atrace category              : dispatchInputEvent ACTION_DOWN/UP slices.
+#    Present even on `user` builds (confirmed by spike) — used as the fling-window
+#    fallback when structured event_action is empty.
+#  - gfx/view/wm/sched atrace             : context for reading the trace by eye.
+#
+# NOTE: the `gfx` atrace category emits per-surface BufferQueue slices
+# (dequeue/queue/acquire/latch) — context only; FPS is computed from FrameTimeline.
+duration_ms: 10000
+buffers { size_kb: 65536  fill_policy: DISCARD }
+data_sources {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            ftrace_events: "sched/sched_switch"
+            ftrace_events: "sched/sched_wakeup_new"
+            ftrace_events: "power/cpu_frequency"
+            ftrace_events: "power/cpu_idle"
+            atrace_categories: "gfx"
+            atrace_categories: "view"
+            atrace_categories: "input"
+            atrace_categories: "sched"
+            atrace_categories: "wm"
+            atrace_apps: "*"
+        }
+    }
+}
+data_sources { config { name: "linux.process_stats" } }
+data_sources { config { name: "linux.system_info" } }
+# FrameTimeline: the authoritative source for actual/expected frame timing + jank.
+data_sources { config { name: "android.surfaceflinger.frametimeline" } }
+# Structured input events (debuggable/userdebug/eng builds; empty action on user builds).
+data_sources { config { name: "android.input.inputevent" } }

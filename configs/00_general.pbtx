@@ -1,0 +1,42 @@
+# General-purpose trace.
+# Datasources: sched, freq, idle, core atrace categories, memory counters.
+# Good default for most "what's going on" investigations.
+duration_ms: 10000
+write_into_file: false
+buffers {
+    size_kb: 65536
+    fill_policy: DISCARD
+}
+data_sources {
+    config {
+        name: "linux.ftrace"
+        ftrace_config {
+            ftrace_events: "sched/sched_switch"
+            ftrace_events: "sched/sched_wakeup_new"
+            ftrace_events: "sched/sched_process_exit"
+            ftrace_events: "power/cpu_frequency"
+            ftrace_events: "power/cpu_idle"
+            ftrace_events: "power/suspend_resume"
+            # ATrace categories/apps belong INSIDE the ftrace data source.
+            # There is no standalone `android.atrace` data source / `atrace_config`.
+            atrace_categories: "am"
+            atrace_categories: "wm"
+            atrace_categories: "gfx"
+            atrace_categories: "view"
+            atrace_categories: "sched"
+            atrace_apps: "*"
+        }
+    }
+}
+data_sources {
+    config {
+        name: "linux.process_stats"
+        target_buffer: 0
+    }
+}
+data_sources {
+    config {
+        name: "linux.system_info"
+        target_buffer: 0
+    }
+}
