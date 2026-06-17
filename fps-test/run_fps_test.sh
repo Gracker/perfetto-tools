@@ -29,7 +29,7 @@ OUT_DIR="${REPO_ROOT}/traces"
 mkdir -p "${OUT_DIR}"
 
 TS="$(date +%Y%m%d_%H%M%S)"
-TRACE="${OUT_DIR}/${TS}_fps.perftrace"
+TRACE="${OUT_DIR}/${TS}_fps.perfetto-trace"
 CAPTURE_LOG="${OUT_DIR}/${TS}_capture.log"
 
 echo "[fps-test] duration: ${DURATION}s"

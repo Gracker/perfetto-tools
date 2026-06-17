@@ -50,6 +50,20 @@ Perfetto 的抓取方式非常分散：命令行（`adb shell perfetto`）、官
 | 10 | 滑动模拟 | `adb shell input swipe` | 跨设备通用、零依赖 |
 | 11 | FPS 多出图源 | 按 layer/surface 分别统计 FrameTimeline + BufferQueue，再汇总；TextureView 单 Buffer 覆盖计为掉帧 | SurfaceView/TextureView/ImageReader/WebView/Flutter/视频不走标准管线，混成一个数字会误判（见 §5.1、§5.2） |
 
+> **实现演进（基于真机 trace 验证，2026-06-17）**：用 `SmartPerfetto/test-traces/`
+> 下 6 个真机滑动 trace 实测后，对决策 #8、#9 做了两处修订：
+> - **#8（数据源）**：6 个 trace 的 `frame_slice`（per-layer BufferQueue）**全部为空**，
+>   TextureView 单 Buffer 覆盖检测（`detect_overwrite_drops`/`buffer_events_to_frames`）
+>   无数据可测，保留为已测库但**未接入** `analyze_trace`。当前 FPS 完全来自
+>   FrameTimeline（`actual_frame_timeline_slice`），按 layer_name 分源。
+> - **#9（窗口界定）**：原定义"ACTION_UP → 下一次 ACTION_DOWN"对单次手势 trace
+>   产出 **0 窗口**（UP 后再无 DOWN），且丢弃最后一次手势的惯性尾巴。修订为
+>   **DOWN → 下一次 DOWN**（整段交互），并按每次手势拆成**三个 FPS 相位**：
+>   overall（按压+惯性）、press（DOWN→UP，按压响应）、fling（UP→next DOWN，惯性流畅度）。
+>   tier-1 的时间戳从 `event_time` 改为 `COALESCE(event_time, dispatch_ts)`（API 36
+>   user build 上 `event_time` 全为 NULL）。详见 `fps-test/README.md` 与
+>   `compute_fps.py` 模块 docstring。
+
 ## 4. 仓库结构
 
 ```

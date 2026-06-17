@@ -3,7 +3,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'fps-test'))
-from compute_fps import FlingWindow, _fallback_windows_from_log, _dedup_action_timestamps
+from compute_fps import Gesture, _gestures_from_swipe_log, _dedup_action_timestamps
 
 
 PATTERN = os.path.join(os.path.dirname(__file__), '..', 'fps-test', 'swipe_pattern.txt')
@@ -36,13 +36,15 @@ def test_swipe_pattern_fields_well_formed():
             int(field)  # all numeric
 
 
-def test_fallback_windows_from_log():
+def test_gestures_from_swipe_log():
+    # tier-3 swipe-log pairs → Gestures with no UP marker (down==up).
     log = [(1000, 2000), (3000, 4000)]
-    ws = _fallback_windows_from_log(log)
-    assert len(ws) == 2
-    assert isinstance(ws[0], FlingWindow)
-    assert ws[0].start_ns == 1000
-    assert ws[0].end_ns == 2000
+    gs = _gestures_from_swipe_log(log)
+    assert len(gs) == 2
+    assert isinstance(gs[0], Gesture)
+    assert gs[0].down_ns == 1000 and gs[0].up_ns == 1000  # no UP marker
+    assert gs[0].end_ns == 2000
+    assert gs[1].end_ns == 4000
 
 
 # --- _dedup_action_timestamps: collapses per-channel ACTION bursts ---

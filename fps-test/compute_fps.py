@@ -1,23 +1,39 @@
 #!/usr/bin/env python3
 """Compute FPS and dropped-frame stats from a Perfetto trace.
 
-Two layers:
+Three layers:
   1. Pure math: Frame/FlingWindow/BufferEvent dataclasses, compute_fps_from_frames(),
      per-source aggregation, and single-buffer overwrite detection. Fully
      unit-tested with synthetic data (no trace_processor needed).
-  2. trace_processor integration: load a real .perfetto-trace, derive fling windows,
+  2. Gesture extraction: pair touch DOWN/UP events into Gestures, each split into
+     three measurement phases — overall (DOWN→next DOWN), press (DOWN→UP), fling
+     (UP→next DOWN) — and compute a full FpsReport per phase (ThreePhaseReport).
+  3. trace_processor integration: load a real .perfetto-trace, derive gestures,
      gather frames from FrameTimeline (actual_frame_timeline_slice, grouped by
-     layer_name → one source per surface), call the math.
+     layer_name → one source per surface), call the three-phase math.
 
-Architecture decisions (see docs/spike-notes.md, validated on API 36):
-  - fling windows: 3-tier fallback.
-      (1) structured android_input_events.event_action (non-NULL; debuggable builds)
-      (2) atrace 'input' slices dispatchInputEvent ACTION_UP → next ACTION_DOWN
-          (works on user builds; confirmed present)
-      (3) device-clock swipe markers from run_fps_test.sh (coarse, last resort)
+Gesture / window model (revised from the original fling-only definition):
+  - A Gesture is one physical touch: DOWN (press start) → UP (press end / fling
+    start) → end (next DOWN, or trace end for the last gesture).
+  - Each gesture yields THREE FPS numbers by phase:
+      overall = [down, end)  the whole interaction (press + fling combined)
+      press   = [down, up)   finger-contact period (drag/press responsiveness)
+      fling   = [up,   end)  finger-up inertia period (fling smoothness)
+    Reporting all three lets a single run diagnose drag perf, fling perf, and
+    overall smoothness separately.
+  - Gesture sources, 3-tier fallback (first non-empty wins):
+      (1) structured android_input_events.event_action with COALESCE(event_time,
+          dispatch_ts) — event_time is NULL on API 36 user builds, so dispatch_ts
+          is the reliable timestamp.
+      (2) atrace 'input' slices dispatchInputEvent/publishMotionEvent ACTION_DOWN/UP
+          (works on user builds; confirmed present on 6 real-device traces).
+      (3) device-clock swipe markers from run_fps_test.sh (coarse; no UP marker →
+          press phase unavailable, only overall/fling reported).
+
+Frame sources & quality signals:
   - multi-source FPS = FrameTimeline grouped by layer_name. layer_name IS NULL →
     bucketed as source "display" (SF output refreshes). frame_slice is empty on
-    this device, so there is no separate BufferQueue path.
+    every tested device, so there is no separate BufferQueue path.
   - drops = present_type='Dropped Frame'. jank = jank_type != None and not dropped.
     (BufferQueue slices lack layer attribution here, so single-buffer overwrite
     detection is NOT wired into analyze_trace; detect_overwrite_drops /
@@ -62,9 +78,34 @@ class BufferEvent:
 
 @dataclass
 class FlingWindow:
-    """A time range [start_ns, end_ns) corresponding to one fling gesture
-    (finger-up ACTION_UP to the next finger-down ACTION_DOWN)."""
+    """A time range [start_ns, end_ns) over which to measure FPS. The pure-math
+    layer only cares about the half-open interval; the semantic meaning
+    (press / fling / overall) is decided by how the window was derived, not
+    stored here. See Gesture for the structured gesture → three-phase mapping."""
     start_ns: int
+    end_ns: int
+
+
+# The three measurement phases reported per gesture. Stable identifiers used
+# both internally (compute_fps_three_phase) and in the human-readable report.
+THREE_PHASES = ("overall", "press", "fling")
+
+
+@dataclass
+class Gesture:
+    """One touch gesture's three timestamps, defining three FPS phases:
+
+      press   = [down_ns, up_ns)    finger down → finger up (drag/press period)
+      fling   = [up_ns,   end_ns)   finger up → next press (inertia period)
+      overall = [down_ns, end_ns)   the whole interaction (press + fling)
+
+    end_ns is the NEXT gesture's DOWN, or the trace end for the last gesture.
+    A Gesture built from a device-clock swipe-log pair (tier-3) has no UP
+    marker → down_ns == up_ns, so the press phase degenerates and is dropped
+    (see gesture_windows).
+    """
+    down_ns: int
+    up_ns: int
     end_ns: int
 
 
@@ -103,6 +144,27 @@ class FpsReport:
     drop_rate: float  # percent
     windows: list  # list[WindowStat]
     by_source: list = field(default_factory=list)  # list[SourceStat]
+
+
+@dataclass
+class ThreePhaseReport:
+    """FPS for the three measurement phases of the captured gestures.
+
+    Each phase is a full FpsReport (its own screen FPS, frame/drop/jank counts,
+    per-source + per-window breakdown):
+      - overall : [DOWN→next DOWN] the whole interaction (press + fling)
+      - press   : [DOWN→UP] finger-contact period (drag/press responsiveness)
+      - fling   : [UP→next DOWN] finger-up inertia period (fling smoothness)
+
+    `press` may be None when there is no UP marker in the source (tier-3
+    device-clock swipe markers carry only start/end, no UP). `source` records
+    which tier produced the gestures, for the report header.
+    """
+    overall: FpsReport
+    press: FpsReport          # None when source has no UP marker (tier-3)
+    fling: FpsReport
+    source: str = ""
+    n_gestures: int = 0
 
 
 def _frame_in_window(f: Frame, w: FlingWindow) -> bool:
@@ -234,55 +296,110 @@ def compute_fps_from_frames(frames, windows) -> FpsReport:
     )
 
 
+def compute_fps_three_phase(gestures, frames, source="", has_press=True):
+    """Three-phase FPS over a list of Gestures.
+
+    Splits each gesture into overall / press / fling windows (gesture_windows)
+    and computes a full FpsReport per phase. `has_press=False` (tier-3 device-
+    clock markers have no UP) skips the press phase → press is None.
+
+    This is the layer above compute_fps_from_frames: it only decides WHICH
+    windows to feed (the three phases), leaving the math unchanged.
+    """
+    overall_w, press_w, fling_w = gesture_windows(gestures)
+    return ThreePhaseReport(
+        overall=compute_fps_from_frames(frames, overall_w),
+        press=compute_fps_from_frames(frames, press_w) if has_press else None,
+        fling=compute_fps_from_frames(frames, fling_w),
+        source=source,
+        n_gestures=len(gestures),
+    )
+
+
 # ---------------------------------------------------------------------------
 # trace_processor integration (only imported when analyzing a real trace)
 # ---------------------------------------------------------------------------
 
-def _fallback_windows_from_log(swipe_log):
-    """Fallback windows from run_fps_test.sh's swipe log.
+def _trace_end_ns(tp):
+    """Last timestamp in the trace, in trace-internal clock (boottime ns).
 
-    The log holds DEVICE REALTIME nanoseconds (recorded via `adb shell date
-    +%s%N`), NOT host time — so they share a clock family with the trace and can
-    be compared after converting frame ts to realtime (see analyze_trace).
-    Each entry is an (start_ns, end_ns) device-realtime tuple."""
-    return [FlingWindow(s, e) for s, e in swipe_log]
+    Used as the fling tail of the final gesture (whose UP has no following
+    DOWN). Sourced from actual_frame_timeline_slice — the same data the FPS
+    math consumes — so the boundary matches the frames under analysis.
+    Falls back to the generic `slice` table if FrameTimeline is empty.
+    """
+    for table in ("actual_frame_timeline_slice", "slice"):
+        try:
+            r = tp.query(f"SELECT MAX(ts) AS m FROM {table}").as_pandas_dataframe()
+            m = int(r['m'][0])
+            if m > 0:
+                return m
+        except Exception:
+            continue
+    return 0
+
+
+def _gestures_from_swipe_log(swipe_log):
+    """Tier-3: device-clock swipe markers → Gestures with no UP marker.
+
+    Each log entry is a (start_ns, end_ns) device-REALTIME pair recorded by
+    run_fps_test.sh. There is no mid-window UP, so down_ns==up_ns and the press
+    phase is degenerate (dropped by gesture_windows); the whole span is treated
+    as the fling/overall phase. Frames must be queried in realtime (see
+    analyze_trace) so they share this clock.
+    """
+    return [Gesture(down_ns=s, up_ns=s, end_ns=e) for s, e in swipe_log]
+
+
+def extract_gestures(tp, swipe_log=None):
+    """Three-tier gesture extraction. Returns (gestures, source, realtime).
+
+    Tiers (first non-empty wins):
+      1. structured android_input_events (COALESCE(event_time, ts))
+      2. atrace dispatchInputEvent / publishMotionEvent ACTION slices
+      3. device-clock swipe_log markers (realtime, no UP → press phase absent)
+    Tiers 1–2 use trace-internal boottime ns; tier 3 uses device realtime, so
+    `realtime` tells the caller to convert frame ts via TO_REALTIME().
+
+    Raises RuntimeError if all three tiers are empty.
+    """
+    trace_end_ns = _trace_end_ns(tp)
+    # tier 1
+    gestures = _extract_fling_windows_structured(tp, trace_end_ns)
+    if gestures:
+        return gestures, "structured input", False
+    # tier 2
+    gestures = _extract_fling_windows_atrace(tp, trace_end_ns)
+    if gestures:
+        return gestures, "atrace ACTION slices", False
+    # tier 3
+    if swipe_log:
+        print("[fps] WARNING: no input events in trace; using device-clock swipe "
+              "markers (tier-3, less precise; press-phase unavailable).", flush=True)
+        return _gestures_from_swipe_log(swipe_log), "device-clock swipe markers", True
+    raise RuntimeError(
+        "No fling windows found. Structured input and atrace ACTION slices are "
+        "both absent (is the 'input' atrace category in the config?), and no "
+        "--swipe-log fallback was provided."
+    )
 
 
 def analyze_trace(trace_path, swipe_log=None):
-    """Load a trace and return an FpsReport.
+    """Load a trace and return a ThreePhaseReport.
 
-    Fling windows: tier-1 structured input → tier-2 atrace ACTION slices →
-    tier-3 device-clock swipe markers. Frames always come from FrameTimeline's
-    actual_frame_timeline_slice, grouped by layer_name.
+    Gestures: tier-1 structured input → tier-2 atrace ACTION slices → tier-3
+    device-clock swipe markers (see extract_gestures). Each gesture is split
+    into overall / press / fling phases; FPS is computed per phase. Frames
+    always come from FrameTimeline's actual_frame_timeline_slice, grouped by
+    layer_name.
 
     swipe_log: optional list of (start_ns, end_ns) device-realtime tuples (tier-3).
     """
     from perfetto.trace_processor import TraceProcessor
 
     tp = TraceProcessor(trace=str(trace_path))
-
-    # Try tier 1 (structured) then tier 2 (atrace slices); both in trace time.
-    windows = _extract_fling_windows_structured(tp)
-    source = "structured input"
-    realtime = False
-    if not windows:
-        windows = _extract_fling_windows_atrace(tp)
-        source = "atrace ACTION slices"
-    if not windows:
-        # tier 3: device-clock markers → must compare in realtime.
-        if not swipe_log:
-            raise RuntimeError(
-                "No fling windows found. Structured input and atrace ACTION slices "
-                "are both absent (is the 'input' atrace category in the config?), "
-                "and no --swipe-log fallback was provided."
-            )
-        print("[fps] WARNING: no input events in trace; using device-clock swipe "
-              "markers (tier-3, less precise).", flush=True)
-        windows = _fallback_windows_from_log(swipe_log)
-        realtime = True
-        source = "device-clock swipe markers"
-    else:
-        print(f"[fps] fling windows from {source} ({len(windows)} windows).", flush=True)
+    gestures, source, realtime = extract_gestures(tp, swipe_log=swipe_log)
+    print(f"[fps] gestures from {source} ({len(gestures)} gesture(s)).", flush=True)
 
     frames = _query_frames(tp, realtime=realtime)
     if not frames:
@@ -290,43 +407,45 @@ def analyze_trace(trace_path, swipe_log=None):
             "No FrameTimeline frames in trace. Needs Android 12+ and the "
             "android.surfaceflinger.frametimeline data source in 02_jank_frame.pbtx."
         )
-    return compute_fps_from_frames(frames, windows)
+    # tier-3 has no UP marker → press phase is unavailable.
+    has_press = source != "device-clock swipe markers"
+    return compute_fps_three_phase(gestures, frames, source=source, has_press=has_press)
 
 
-def _extract_fling_windows_structured(tp):
-    """Tier 1: ACTION_UP → next ACTION_DOWN from structured android_input_events.
-    Only populated on debuggable/userdebug/eng builds (event_action is NULL on
-    user builds). The time column is `event_time` (the MotionEvent's own clock),
-    not `ts`. Returns [] otherwise → caller falls through to tier 2.
+def _extract_fling_windows_structured(tp, trace_end_ns):
+    """Tier 1: gestures from structured android_input_events.
+
+    Returns list[Gesture], or [] to fall through to tier 2.
+
+    Uses `COALESCE(event_time, dispatch_ts)` for the timestamp: on API 36 (and
+    other builds) `event_time` is NULL for every row, so we fall back to
+    `dispatch_ts` (when the event was dispatched to the app — always populated).
+    The old code used `event_time` directly → all-NULL → empty windows even
+    when input data was present. (`ts` is not a column of this view.)
+
+    Only DOWN/UP actions participate (MOVE is ignored). events_action may be
+    NULL on some builds; those rows are filtered out.
     """
-    windows = []
     try:
         qr = tp.query("""
             INCLUDE PERFETTO MODULE android.input;
-            SELECT event_time, event_action
+            SELECT COALESCE(event_time, dispatch_ts) AS t, event_action
             FROM android_input_events
             WHERE event_action IS NOT NULL
-            ORDER BY event_time
+            ORDER BY t
         """)
         events = []
         for row in qr:
             action = (row.event_action or "").upper()
             if "UP" in action:
-                events.append((row.event_time, True))
+                events.append((row.t, True))
             elif "DOWN" in action:
-                events.append((row.event_time, False))
+                events.append((row.t, False))
         events = _dedup_action_timestamps(events)
-        for i, (ts, is_up) in enumerate(events):
-            if not is_up:
-                continue
-            for j in range(i + 1, len(events)):
-                tts, tis_up = events[j]
-                if not tis_up:
-                    windows.append(FlingWindow(ts, tts))
-                    break
+        return _pair_actions_to_gestures(events, trace_end_ns)
     except Exception as e:
         print(f"[fps] structured input query failed ({e}); trying atrace tier.", flush=True)
-    return windows
+        return []
 
 
 def _dedup_action_timestamps(events, gap_ns=50_000_000):
@@ -353,15 +472,90 @@ def _dedup_action_timestamps(events, gap_ns=50_000_000):
     return out
 
 
-def _extract_fling_windows_atrace(tp):
-    """Tier 2: ACTION_UP → next ACTION_DOWN from the 'input' atrace category's
-    dispatchInputEvent slices. Works on user builds (confirmed on API 36 user).
+def _pair_actions_to_gestures(events, trace_end_ns):
+    """Pair de-duped ACTION events into Gestures.
 
-    A fling window starts when the finger lifts (ACTION_UP) and ends at the next
-    finger press (ACTION_DOWN). One gesture fires multiple slices (one per input
-    channel), so we de-dup bursts first, then pair each UP with the next DOWN.
+    `events`: sorted list of (ts, is_up) already passed through
+    _dedup_action_timestamps (one DOWN/UP per gesture).
+    `trace_end_ns`: the timestamp of the last frame / end of trace, used as the
+    fling tail of the final gesture (whose UP has no following DOWN).
 
-    Returns [] on any failure → caller falls through to tier 3.
+    Each DOWN is paired with the next UP after it to form the press phase; the
+    fling phase runs from that UP to the next gesture's DOWN (or trace_end_ns
+    for the last gesture). A DOWN with no following UP is truncated and skipped.
+    A Gesture's press phase is [down, up); its fling phase is [up, end).
+
+    This replaces the old UP→next-DOWN-only pairing, which produced ZERO windows
+    for a single-gesture trace (the UP had no following DOWN) and dropped the
+    last gesture's inertia tail on multi-gesture traces.
+    """
+    # Collect (down, up) pairs in order: a DOWN followed by the next UP.
+    pairs = []
+    i = 0
+    n = len(events)
+    while i < n:
+        if events[i][1]:                # orphan UP → skip
+            i += 1
+            continue
+        down = events[i][0]
+        # find the matching UP: first UP strictly after this DOWN.
+        up = None
+        for k in range(i + 1, n):
+            if events[k][1]:
+                up = events[k][0]
+                break
+        if up is None:                  # DOWN with no UP (truncated) → stop
+            break
+        pairs.append((down, up))
+        i = k + 1
+    # Each pair's end = next pair's DOWN, or trace_end for the last.
+    gestures = []
+    for idx, (down, up) in enumerate(pairs):
+        end = pairs[idx + 1][0] if idx + 1 < len(pairs) else trace_end_ns
+        gestures.append(Gesture(down_ns=down, up_ns=up, end_ns=end))
+    return gestures
+
+
+def gesture_windows(gestures):
+    """Derive the three measurement-phase FlingWindow lists from Gestures.
+
+    Returns (overall_windows, press_windows, fling_windows):
+      - overall: [down, end) for every gesture
+      - press  : [down, up)  for every gesture with a real UP marker
+      - fling  : [up,   end) for every gesture; for swipe-log Gestures with no
+                 UP marker (down==up), the whole [down, end) is treated as the
+                 fling phase instead of being lost.
+    Zero-width windows (start == end) are dropped to avoid divide-by-zero.
+    """
+    overall, press, fling = [], [], []
+    for g in gestures:
+        if g.end_ns > g.down_ns:
+            overall.append(FlingWindow(g.down_ns, g.end_ns))
+        if g.up_ns > g.down_ns:
+            press.append(FlingWindow(g.down_ns, g.up_ns))
+            if g.end_ns > g.up_ns:
+                fling.append(FlingWindow(g.up_ns, g.end_ns))
+        else:
+            # no UP marker (tier-3 swipe log) → whole span is fling
+            if g.end_ns > g.down_ns:
+                fling.append(FlingWindow(g.down_ns, g.end_ns))
+    return overall, press, fling
+
+
+def _extract_fling_windows_atrace(tp, trace_end_ns):
+    """Tier 2: gestures from the 'input' atrace category's slices.
+
+    Returns list[Gesture], or [] to fall through to tier 3.
+
+    Primary source: `dispatchInputEvent MotionEvent ACTION_DOWN/UP`. Fallback
+    (if absent): `publishMotionEvent ... action=DOWN/UP`. Both carry the same
+    gesture timing (verified identical across 6 real-device traces), so either
+    delimits gestures correctly.
+
+    One physical gesture fires several slices (one per input channel), so we
+    de-dup bursts first, then pair DOWN→UP→next-DOWN into Gestures (see
+    _pair_actions_to_gestures for why this supersedes the old UP→next-DOWN-only
+    pairing that dropped single-gesture traces).
     """
     try:
         qr = tp.query("""
@@ -390,17 +584,7 @@ def _extract_fling_windows_atrace(tp):
                 events.append((row.ts, False))
         events.sort()
         events = _dedup_action_timestamps(events)
-        # Pair each UP with the next DOWN after it.
-        windows = []
-        for i, (ts, is_up) in enumerate(events):
-            if not is_up:
-                continue
-            for j in range(i + 1, len(events)):
-                tts, tis_up = events[j]
-                if not tis_up:  # next DOWN
-                    windows.append(FlingWindow(ts, tts))
-                    break
-        return windows
+        return _pair_actions_to_gestures(events, trace_end_ns)
     except Exception as e:
         print(f"[fps] atrace ACTION slice query failed ({e}).", flush=True)
         return []
@@ -444,32 +628,60 @@ def _query_frames(tp, realtime=False):
     return frames
 
 
-def format_report(report: FpsReport, trace_path: str) -> str:
-    lines = []
-    lines.append(f"=== FPS Report: {trace_path} ===")
-    lines.append(f"Screen FPS (display/SF output over fling windows): {report.overall_fps:.1f}")
-    lines.append(f"Total frames (all sources): {report.total_frames}")
-    lines.append(f"  presented       : {report.presented_frames}")
-    lines.append(f"  dropped         : {report.dropped_frames}  (never on screen)")
-    lines.append(f"  janky           : {report.janky_frames}  (presented late)")
-    lines.append(f"Drop rate         : {report.drop_rate:.2f}%")
-    lines.append("")
-    lines.append("Per-frame-source breakdown (this is the FPS that matters):")
+def _format_phase(report: FpsReport, indent="") -> list:
+    """Format one phase's FpsReport as report lines (no header)."""
+    L = []
+    L.append(f"{indent}Screen FPS (display/SF output): {report.overall_fps:.1f}")
+    L.append(f"{indent}Total frames (all sources): {report.total_frames}")
+    L.append(f"{indent}  presented       : {report.presented_frames}")
+    L.append(f"{indent}  dropped         : {report.dropped_frames}  (never on screen)")
+    L.append(f"{indent}  janky           : {report.janky_frames}  (presented late)")
+    L.append(f"{indent}Drop rate         : {report.drop_rate:.2f}%")
+    L.append(f"{indent}Per-frame-source breakdown:")
     if report.by_source:
         for s in report.by_source:
-            lines.append(
-                f"  {s.source:<40} fps={s.fps:6.1f} frames={s.frame_count} "
+            L.append(
+                f"{indent}  {s.source:<40} fps={s.fps:6.1f} frames={s.frame_count} "
                 f"presented={s.presented} dropped={s.dropped} janky={s.janky}"
             )
     else:
-        lines.append("  (single source)")
+        L.append(f"{indent}  (single source)")
+    return L
+
+
+def format_report(report, trace_path: str) -> str:
+    """Format a ThreePhaseReport (or a legacy single FpsReport) as text."""
+    # Legacy single-phase report (e.g. from compute_fps_from_frames directly).
+    if isinstance(report, FpsReport):
+        return "\n".join(_format_phase(report))
+
+    lines = []
+    lines.append(f"=== FPS Report: {trace_path} ===")
+    lines.append(f"[window source: {report.source}, {report.n_gestures} gesture(s)]")
     lines.append("")
-    lines.append("Per-fling-window breakdown:")
-    for w in report.windows:
-        lines.append(
-            f"  window {w.index}: frames={w.frame_count} "
-            f"dropped={w.dropped} janky={w.janky} fps={w.fps:.1f}"
-        )
+
+    lines.append("-- Overall (press + fling: DOWN -> next DOWN) --")
+    lines.extend(_format_phase(report.overall))
+    lines.append("")
+
+    if report.press is not None:
+        lines.append("-- Press phase (finger down -> up) --")
+        lines.extend(_format_phase(report.press))
+        lines.append("")
+    else:
+        lines.append("-- Press phase: N/A (source has no UP marker, e.g. tier-3 swipe log) --")
+        lines.append("")
+
+    lines.append("-- Fling phase (finger up -> next press) --")
+    lines.extend(_format_phase(report.fling))
+    lines.append("")
+
+    lines.append("Per-gesture Screen-FPS (overall / press / fling):")
+    for i in range(len(report.overall.windows)):
+        o = report.overall.windows[i].fps
+        p = report.press.windows[i].fps if (report.press and i < len(report.press.windows)) else float("nan")
+        f = report.fling.windows[i].fps if i < len(report.fling.windows) else float("nan")
+        lines.append(f"  gesture {i}: overall={o:.1f}  press={p:.1f}  fling={f:.1f}")
     return "\n".join(lines)
 
 
