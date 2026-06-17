@@ -97,15 +97,17 @@ Gesture sources, 3-tier fallback (first non-empty wins):
    timestamps are converted with `TO_REALTIME()` so both sides share the
    device-realtime clock.
 
-## macOS / trace_processor note
+## trace_processor_shell (no run-time download)
 
-On macOS Python 3.12 the `perfetto` package's first run can hit an SSL cert
-error when fetching `trace_processor_shell`. Fix:
+The native `trace_processor_shell` binary ships in [`../tools/trace_processor_shell/`](../tools/trace_processor_shell/)
+(5 platforms, ~50MB). `run_fps_test.sh` sets `PYTHONPATH` so a preload hook
+(`_tp_shell_patch.py`) patches the `perfetto` pip package to use that local
+binary instead of downloading it. Run `./tools/setup.sh` once to verify the
+binaries' checksums.
 
-```bash
-pip install certifi
-export SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')"
-```
+You still need `pip install perfetto` (the Python SQL client) - but the ~12MB
+native binary no longer comes from the network, which avoids the macOS Python
+3.12 SSL-cert error that the pip package's download path hits.
 
 ## Auxiliary cross-check: `dump_gfxinfo.sh`
 

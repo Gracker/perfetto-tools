@@ -125,16 +125,37 @@ def materialize_config(config_path, seconds):
     return tmp
 
 
+
+def _resolve_adb():
+    """Return the adb executable path, mirroring tools/resolve.sh's precedence.
+
+    Order: $PERFETTO_TOOLS_ADB -> <repo>/.bin/adb -> PATH lookup. Returns the
+    bare string 'adb' as a last resort so the caller's FileNotFoundError handler
+    still fires with a helpful message if nothing is installed.
+    """
+    env = os.environ.get("PERFETTO_TOOLS_ADB")
+    if env and os.path.isfile(env) and os.access(env, os.X_OK):
+        return env
+    bin_adb = _REPO_ROOT / ".bin" / "adb"
+    if bin_adb.is_file() and os.access(bin_adb, os.X_OK):
+        return str(bin_adb)
+    return "adb"
+
+
 def check_adb_device(serial=None):
     """Ensure exactly one usable device (or the one named by --serial)."""
+    adb = _resolve_adb()
     try:
         out = subprocess.run(
-            ["adb", "devices"],
+            [adb, "devices"],
             capture_output=True, text=True, check=True,
         ).stdout.strip().splitlines()[1:]
     except FileNotFoundError:
         sys.exit(
-            "ERROR: 'adb' not found on PATH. Install Android Platform Tools:\n"
+            "ERROR: 'adb' not found. Options:\n"
+            "  - run './tools/setup.sh' to install it into .bin/\n"
+            "  - set PERFETTO_TOOLS_ADB=/path/to/adb\n"
+            "  - put Android Platform Tools on PATH\n"
             "  https://developer.android.com/studio/releases/platform-tools"
         )
 

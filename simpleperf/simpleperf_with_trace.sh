@@ -15,12 +15,15 @@ OUT_DIR="${REPO_ROOT}/traces"
 CAPTURE="${REPO_ROOT}/capture/capture.sh"
 mkdir -p "${OUT_DIR}"
 
+# Locate adb via tools/resolve.sh (env override > .bin/ > PATH).
+ADB="$("${REPO_ROOT}/tools/resolve.sh" adb)"
+
 TS="$(date +%Y%m%d_%H%M%S)"
 REMOTE="/data/local/tmp/perf_${TS}.data"
 LOCAL="${OUT_DIR}/simpleperf_${TS}.data"
 TRACE="${OUT_DIR}/${TS}_cpu.perfetto-trace"
 
-PID="$(adb shell pidof "${PKG}" | tr -d '\r' | head -n1 || true)"
+PID="$("$ADB" shell pidof "${PKG}" | tr -d '\r' | head -n1 || true)"
 if [[ -z "${PID}" ]]; then
   echo "ERROR: no running process for ${PKG}. Launch the app first." >&2
   exit 1
@@ -39,7 +42,7 @@ cleanup() {
   if [[ -n "${SP_PID}" ]] && kill -0 "${SP_PID}" 2>/dev/null; then
     wait "${SP_PID}" 2>/dev/null || true
   fi
-  adb shell rm -f "${REMOTE}" 2>/dev/null || true
+  "$ADB" shell rm -f "${REMOTE}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -47,7 +50,7 @@ trap cleanup EXIT
 # Captures its stderr so the post-failure diagnostic below can match simpleperf's
 # own "not supported on the device" line and give a precise reason.
 echo "[combined] starting simpleperf (background)..."
-adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>"${OUT_DIR}/${TS}_sp.stderr" &
+"$ADB" shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>"${OUT_DIR}/${TS}_sp.stderr" &
 SP_PID=$!
 
 # 2. Perfetto trace in the foreground, same duration. --no-open so it returns.
@@ -77,8 +80,8 @@ if [[ "${SP_RC}" -ne 0 ]]; then
 fi
 rm -f "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null || true
 
-adb pull "${REMOTE}" "${LOCAL}"
-adb shell rm -f "${REMOTE}"
+"$ADB" pull "${REMOTE}" "${LOCAL}"
+"$ADB" shell rm -f "${REMOTE}"
 
 echo ""
 echo "Done."

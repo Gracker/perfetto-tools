@@ -15,6 +15,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUT_DIR="${REPO_ROOT}/traces"
 mkdir -p "${OUT_DIR}"
 
+# Locate adb via tools/resolve.sh (env override > .bin/ > PATH). Resolves to a
+# real path or exits with guidance.
+ADB="$("${REPO_ROOT}/tools/resolve.sh" adb)"
+
 TS="$(date +%Y%m%d_%H%M%S)"
 REMOTE="/data/local/tmp/perf_${TS}.data"
 LOCAL="${OUT_DIR}/simpleperf_${TS}.data"
@@ -23,7 +27,7 @@ echo "[simpleperf] package : ${PKG}"
 echo "[simpleperf] duration: ${DURATION}s"
 
 # Find the app's main pid.
-PID="$(adb shell pidof "${PKG}" | tr -d '\r' | head -n1 || true)"
+PID="$("$ADB" shell pidof "${PKG}" | tr -d '\r' | head -n1 || true)"
 if [[ -z "${PID}" ]]; then
   echo "ERROR: no running process for ${PKG}. Launch the app first." >&2
   exit 1
@@ -34,7 +38,7 @@ echo "[simpleperf] recording..."
 # -g: callchain based. (Add --trace-offcpu for off-cpu time if desired.)
 # Captures both stdout+stderr so we can match simpleperf's own diagnostic line
 # and give a precise reason instead of a generic "is the app debuggable?".
-if ! SP_OUT=$(adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>&1); then
+if ! SP_OUT=$("$ADB" shell simpleperf record -p "${PID}" -g --duration "${DURATION}" -o "${REMOTE}" 2>&1); then
   echo "${SP_OUT}" | tr -d '\r' >&2
   echo "" >&2
   echo "ERROR: simpleperf record failed." >&2
@@ -51,8 +55,8 @@ if ! SP_OUT=$(adb shell simpleperf record -p "${PID}" -g --duration "${DURATION}
 fi
 
 echo "[simpleperf] pulling -> ${LOCAL}"
-adb pull "${REMOTE}" "${LOCAL}"
-adb shell rm -f "${REMOTE}"
+"$ADB" pull "${REMOTE}" "${LOCAL}"
+"$ADB" shell rm -f "${REMOTE}"
 
 echo ""
 echo "Done: ${LOCAL}"

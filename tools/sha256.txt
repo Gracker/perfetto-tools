@@ -1,0 +1,14 @@
+# trace_processor_shell v49.0 — SHA256 checksums
+# Source: perfetto amalgamated tools/trace_processor manifest (v49.0)
+#         https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v49.0/
+# Verify integrity: shasum -a 256 -c tools/sha256.txt
+# (run this from the repo root; paths below are relative to repo root)
+#
+# If a checksum fails, re-download from the URL pattern:
+#   https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v49.0/<arch>/trace_processor_shell[.exe]
+
+867c70800cfe81c2640f2aae8bb58eca68fa1389a3258a25c285ee5510edbbe3  tools/trace_processor_shell/mac-amd64
+9c325030078bc4de8693083c9e4e2b72c83ca694c3a4ef8cc1bd9c29fb421815  tools/trace_processor_shell/mac-arm64
+6af6f87e6521eec186e74c68c0c6eeeeb557556e368d0e4f563be5ce5d9d936b  tools/trace_processor_shell/linux-amd64
+ecb6a1a073eb4bbfe36af56ab4406671e8febe02fb4c6dcef73fb1fe5d817fad  tools/trace_processor_shell/linux-arm64
+a881f3e2d4c6131493e85bfd1f36d1efe58e1478e2991825418d5d21614c1e48  tools/trace_processor_shell/windows-amd64.exe

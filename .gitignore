@@ -17,3 +17,6 @@ perf_report.html
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tool installs (tools/setup.sh downloads adb here)
+.bin/
