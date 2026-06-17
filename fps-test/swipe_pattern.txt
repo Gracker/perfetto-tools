@@ -1,0 +1,20 @@
+# Swipe pattern for FPS testing.
+# Format per line: <direction> <x1> <y1> <x2> <y2> <duration_ms> <gap_ms>
+#   direction: up | down
+#   coordinates are absolute pixels; tune for your device resolution.
+#   duration_ms: how long the swipe gesture takes (longer = slower scroll).
+#   gap_ms: pause AFTER the swipe, during which the fling/inertia runs and FPS
+#           is measured (the post-up fling phase).
+#
+# Pattern: 3 up-swipes then 3 down-swipes. Default coordinates target a
+# ~1264x2800 screen (OPPO P0110-class). Re-center x for your width and adjust
+# the y span for how far you want each fling to travel.
+#
+# Per-swipe budget: 400ms swipe + 600ms gap = 1s; 6 swipes ~= 6s. With a 2s
+# tracer-startup wait, a 12s trace (run_fps_test.sh default) covers it.
+up    632 2100 632 700  400 600
+up    632 2100 632 700  400 600
+up    632 2100 632 700  400 600
+down  632 700  632 2100 400 600
+down  632 700  632 2100 400 600
+down  632 700  632 2100 400 600
