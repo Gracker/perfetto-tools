@@ -2,8 +2,8 @@
 # One-time environment setup: ensure adb is available, verify the prebuilt
 # trace_processor_shell binaries. Idempotent — safe to re-run.
 #
-# - adb: if already on PATH, leave it (resolve.sh will find it). Otherwise
-#        download Google's platform-tools into .bin/ and verify its checksum.
+# - adb: if resolve.sh already finds one, leave it. Otherwise download Google's
+#        platform-tools into .bin/ and verify its checksum.
 # - trace_processor_shell: verify the 5 shipped binaries against tools/sha256.txt.
 #        (They ship in the repo, so no download — just an integrity check.)
 #
@@ -14,6 +14,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BIN_DIR="${REPO_ROOT}/.bin"
+
+sha256_file() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    echo "ERROR: shasum or sha256sum is required for tool verification." >&2
+    return 1
+  fi
+}
 
 # ---------- platform detection ----------
 detect_platform() {
@@ -42,31 +53,26 @@ if [[ ! -d "${TP_DIR}" ]]; then
   echo "       may be incomplete (e.g. a shallow/archive export)." >&2
   exit 1
 fi
-if command -v shasum >/dev/null 2>&1; then
-  # Verify every shipped binary; -a 256, silently fail on missing (caught below).
-  cd "${REPO_ROOT}"
-  fails=0
-  while IFS= read -r line; do
-    [[ -z "${line}" || "${line}" == "#"* ]] && continue
-    expected="$(echo "${line}" | awk '{print $1}')"
-    file="$(echo "${line}" | awk '{print $2}')"
-    if [[ ! -f "${file}" ]]; then
-      echo "  MISSING  ${file}"; fails=$((fails+1)); continue
-    fi
-    actual="$(shasum -a 256 "${file}" | awk '{print $1}')"
-    if [[ "${actual}" == "${expected}" ]]; then
-      echo "  OK       $(basename "${file}")"
-    else
-      echo "  FAIL     ${file} (sha256 mismatch)"; fails=$((fails+1))
-    fi
-  done < "${SCRIPT_DIR}/sha256.txt"
-  if [[ ${fails} -gt 0 ]]; then
-    echo "ERROR: ${fails} trace_processor_shell binary/binary checksum(s) failed." >&2
-    echo "       Re-clone or re-download from the URLs in tools/sha256.txt." >&2
-    exit 1
+cd "${REPO_ROOT}"
+fails=0
+while IFS= read -r line; do
+  [[ -z "${line}" || "${line}" == "#"* ]] && continue
+  expected="$(echo "${line}" | awk '{print $1}')"
+  file="$(echo "${line}" | awk '{print $2}')"
+  if [[ ! -f "${file}" ]]; then
+    echo "  MISSING  ${file}"; fails=$((fails+1)); continue
   fi
-else
-  echo "  (shasum not found; skipping verification)"
+  actual="$(sha256_file "${file}")"
+  if [[ "${actual}" == "${expected}" ]]; then
+    echo "  OK       $(basename "${file}")"
+  else
+    echo "  FAIL     ${file} (sha256 mismatch)"; fails=$((fails+1))
+  fi
+done < "${SCRIPT_DIR}/sha256.txt"
+if [[ ${fails} -gt 0 ]]; then
+  echo "ERROR: ${fails} trace_processor_shell binary checksum(s) failed." >&2
+  echo "       Re-clone or re-download from the URLs in tools/sha256.txt." >&2
+  exit 1
 fi
 
 # Confirm the host's own platform binary exists + is executable.
@@ -83,9 +89,12 @@ else
   echo "        compute_fps.py will fall back to the pip package's download." >&2
 fi
 
-# ---------- adb: use PATH copy, else download ----------
-if command -v adb >/dev/null 2>&1; then
-  echo "[setup] adb already on PATH: $(command -v adb)"
+PYTHON="$("${SCRIPT_DIR}/resolve.sh" python)"
+echo "[setup] Python 3.9+: ${PYTHON}"
+
+# ---------- adb: use the shared resolver, else download ----------
+if ADB="$("${SCRIPT_DIR}/resolve.sh" adb 2>/dev/null)"; then
+  echo "[setup] adb available: ${ADB}"
   exit 0
 fi
 
@@ -93,17 +102,17 @@ echo "[setup] adb not on PATH — downloading platform-tools..."
 
 # platform-tools download URLs + SHA256 (Google's published zips).
 # Update these when bumping the platform-tools version.
-PT_VERSION="35.0.2"
+PT_VERSION="37.0.0"
 case "${PLATFORM}" in
   mac-arm64|mac-amd64)
     # Google ships a single mac zip that covers both arches (universal-ish; the
     # arm64 slice runs natively on Apple Silicon).
     PT_URL="https://dl.google.com/android/repository/platform-tools_r${PT_VERSION}-darwin.zip"
-    PT_SHA="d0e0c552d3adc4399eb93e2c5a071fb20c73f2533e58c9a6f86b5b0a79b6e8f1"
+    PT_SHA="094a1395683c509fd4d48667da0d8b5ef4d42b2abfcd29f2e8149e2f989357c7"
     ;;
   linux-amd64)
     PT_URL="https://dl.google.com/android/repository/platform-tools_r${PT_VERSION}-linux.zip"
-    PT_SHA="d34a500c293ea7d5bc3b5e39c77d4f9a4b8f51b18c8b6b6e0a1d9a5c4b8c5b0c"
+    PT_SHA="198ae156ab285fa555987219af237b31102fefe8b9d2bc274708a8d4f2865a07"
     ;;
   *)
     echo "ERROR: automatic adb install not supported for ${PLATFORM}." >&2
@@ -117,17 +126,23 @@ esac
 
 mkdir -p "${BIN_DIR}"
 TMP_ZIP="${BIN_DIR}/platform-tools.zip"
+for tool in curl unzip; do
+  if ! command -v "${tool}" >/dev/null 2>&1; then
+    echo "ERROR: ${tool} is required to install platform-tools." >&2
+    exit 1
+  fi
+done
 echo "[setup] downloading ${PT_URL}"
 curl -fL "${PT_URL}" -o "${TMP_ZIP}"
 
-# Verify checksum (best-effort; warn but continue if we don't have the exact hash).
-if command -v shasum >/dev/null 2>&1; then
-  actual="$(shasum -a 256 "${TMP_ZIP}" | awk '{print $1}')"
-  if [[ "${actual}" != "${PT_SHA}" ]]; then
-    echo "[setup] WARNING: platform-tools zip sha256 mismatch (expected ${PT_SHA}, got ${actual})." >&2
-    echo "          The pinned hash above may be stale — verify the zip is the official" >&2
-    echo "          Google build before trusting it. Proceeding anyway." >&2
-  fi
+# Never install an archive that does not match the reviewed Google download.
+actual="$(sha256_file "${TMP_ZIP}")"
+if [[ "${actual}" != "${PT_SHA}" ]]; then
+  echo "ERROR: platform-tools zip sha256 mismatch." >&2
+  echo "       expected ${PT_SHA}" >&2
+  echo "       actual   ${actual}" >&2
+  rm -f "${TMP_ZIP}"
+  exit 1
 fi
 
 echo "[setup] extracting..."

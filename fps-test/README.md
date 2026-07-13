@@ -10,7 +10,7 @@ the fling (finger-up) phases only.
 2. Run:
 
 ```bash
-pip install perfetto                       # trace_processor, needed for the compute step
+python -m pip install -r requirements.txt  # run from the repository root
 ./fps-test/run_fps_test.sh                 # 12s default
 ./fps-test/run_fps_test.sh 16              # 16s (slow device / longer swipe pattern)
 ./fps-test/run_fps_test.sh 12 com.example.app   # + gfxinfo/SurfaceFlinger cross-check
@@ -105,9 +105,9 @@ The native `trace_processor_shell` binary ships in [`../tools/trace_processor_sh
 binary instead of downloading it. Run `./tools/setup.sh` once to verify the
 binaries' checksums.
 
-You still need `pip install perfetto` (the Python SQL client) - but the ~12MB
-native binary no longer comes from the network, which avoids the macOS Python
-3.12 SSL-cert error that the pip package's download path hits.
+Install the pinned `perfetto==0.57.2` Python SQL client from
+`../requirements.txt`. The matching v57.2 native binary stays local, avoiding
+runtime downloads and client/binary version drift.
 
 ## Auxiliary cross-check: `dump_gfxinfo.sh`
 
@@ -140,7 +140,7 @@ device resolution (defaults target ~1264×2800). Format per line:
 ## Requirements
 
 - `adb`, one connected device.
-- Python 3.9+ with `pip install perfetto` (trace_processor).
+- Python 3.9+ with `python -m pip install -r requirements.txt` from repo root.
 - The archived official script at `../official/` (included).
 - FrameTimeline needs Android 12 (API 31)+.
 

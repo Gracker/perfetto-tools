@@ -1,5 +1,5 @@
-# These are prebuilt native binaries (trace_processor_shell, pinned to perfetto v49.0).
+# Prebuilt native binaries (trace_processor_shell, pinned to Perfetto v57.2).
 # Treat as binary (no line-ending / diff mangling) and exclude from source archives
-# so a `git archive` tarball doesn't ship 50MB of binaries.
+# so a `git archive` tarball doesn't ship about 65MB of binaries.
 trace_processor_shell/* binary
 trace_processor_shell/* export-ignore

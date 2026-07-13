@@ -1,0 +1,43 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+
+      - name: Run Python tests
+        run: python -m pytest tests/ -v
+
+      - name: Verify shell entrypoints
+        run: |
+          git ls-files -z '*.sh' | xargs -0 bash -n
+          git ls-files -z '*.sh' | xargs -0 shellcheck
+
+      - name: Smoke-test pinned tools and CLIs
+        run: |
+          awk '!/^#/ && NF' tools/sha256.txt | sha256sum --check -
+          tools/trace_processor_shell/linux-amd64 --version
+          ./capture/capture.sh --list-configs
+          python official/record_android_trace --help >/dev/null

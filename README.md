@@ -3,18 +3,19 @@
 A consolidated toolkit for capturing [Perfetto](https://perfetto.dev/) traces on
 Android, plus Simpleperf capture and automated swipe-based FPS testing.
 
-**Self-contained**: the `trace_processor_shell` binaries ship in the repo, and
-`adb` is auto-installed by `./tools/setup.sh` if missing. No run-time downloads on
-a supported host.
+**Pinned and offline-ready**: Perfetto v57.2 `trace_processor_shell` binaries ship
+in the repo, `record_android_trace` is pinned to an inspected upstream commit,
+and `adb` is installed from verified Platform-Tools 37.0.0 archives when missing.
 
 ---
 
 ## 5-minute start
 
 ```bash
-# 1. Install deps + verify the shipped binaries (one-time)
+# 1. Create an environment, install the pinned client, verify host tools
+"$(./tools/resolve.sh python)" -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ./tools/setup.sh
-pip install perfetto          # the Python SQL client (for FPS analysis only)
 
 # 2. Plug in a device, enable USB debugging, confirm it's seen
 adb devices                   # should list one device
@@ -32,6 +33,16 @@ That's capture done. To measure FPS while scrolling:
 ./fps-test/run_fps_test.sh 12 com.example.app
 #    → captures a trace while auto-swiping (3 up, 3 down) and prints an FPS report
 ```
+
+Migrating an old `systrace.py` command? Use lightweight Perfetto mode:
+
+```bash
+./capture/capture.sh --categories sched freq gfx view \
+  --time 10 --buffer 32mb --app com.example.app
+```
+
+See the [Systrace migration guide](docs/systrace-migration.md) for flag mappings,
+Android-version boundaries, and why supported `atrace` categories remain.
 
 ---
 
@@ -97,13 +108,17 @@ keyword, or full stem (`02`, `jank`, `02_jank_frame` all work).
 
 `--list-configs` shows them. See [`configs/README.md`](configs/README.md).
 
+Preset mode is for repeatable, full pbtxt configs. `--categories` is a separate
+lightweight mode for ad-hoc capture and old Systrace-style category lists; flags
+from the two modes are intentionally not mixed.
+
 ---
 
 ## What's in this repo
 
 | Directory | Purpose |
 |---|---|
-| [`tools/`](tools/) | One-time `setup.sh`, adb `resolve.sh`, prebuilt `trace_processor_shell` (5 platforms). |
+| [`tools/`](tools/) | Verified setup, adb/Python resolution, Perfetto v57.2 `trace_processor_shell` (5 platforms). |
 | [`official/`](official/) | Pinned snapshot of Google's `record_android_trace`. |
 | [`capture/`](capture/) | Cross-platform one-shot capture (`.bat` for Windows, `.sh` for Mac/Linux). |
 | [`configs/`](configs/) | 6 prebuilt trace configs for common scenarios. |
@@ -116,9 +131,10 @@ keyword, or full stem (`02`, `jank`, `02_jank_frame` all work).
 
 - **adb**: auto-installed by `./tools/setup.sh` if not on PATH. Override with
   `PERFETTO_TOOLS_ADB=/path/to/adb`.
-- **Python 3.9+**.
-- **`pip install perfetto`** — only for FPS analysis. The ~12MB native
-  `trace_processor_shell` ships in `tools/` (no run-time download).
+- **Python 3.9+**. Override discovery with
+  `PERFETTO_TOOLS_PYTHON=/path/to/python` when needed.
+- **`python -m pip install -r requirements.txt`** — installs the matching
+  `perfetto==0.57.2` SQL client. Native trace processing stays local.
 - An **Android device** connected via USB with debugging enabled.
 
 ---
@@ -156,7 +172,14 @@ instead. See [`simpleperf/README.md`](simpleperf/README.md).
 ## Testing
 
 ```bash
-python3 -m pytest tests/ -v     # 43 unit tests (config resolution, FPS math, swipe parsing)
+python -m pip install -r requirements-dev.txt
+python -m pytest tests/ -v
+
+git ls-files -z '*.sh' | xargs -0 bash -n
+git ls-files -z '*.sh' | xargs -0 shellcheck
+
+./tools/setup.sh
+./capture/capture.sh --list-configs
 ```
 
 Device-dependent flows (capture, simpleperf, fps-test end-to-end) are verified
@@ -168,6 +191,9 @@ schema findings that shaped the FPS code.
 
 ## Design docs
 
-- [Design spec](docs/superpowers/specs/2026-06-17-perfetto-tools-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-06-17-perfetto-tools.md)
+- [Current modernization design](docs/superpowers/specs/2026-07-13-perfetto-tools-modernization-design.md)
+- [Current implementation plan](docs/superpowers/plans/2026-07-13-perfetto-tools-modernization.md)
+- [Original design spec](docs/superpowers/specs/2026-06-17-perfetto-tools-design.md)
+- [Original implementation plan](docs/superpowers/plans/2026-06-17-perfetto-tools.md)
+- [Systrace migration](docs/systrace-migration.md)
 - [On-device spike notes](docs/spike-notes.md)

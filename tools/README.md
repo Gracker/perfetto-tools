@@ -11,10 +11,15 @@ pre-installed, and nothing is downloaded at run time on a supported host.
 
 This:
 1. **Verifies** the 5 shipped `trace_processor_shell` binaries against
-   `tools/sha256.txt` (integrity check — they ship in the repo, ~50MB total).
-2. **adb**: if `adb` is already on your PATH, leaves it alone. Otherwise downloads
-   Google's platform-tools into `.bin/` and lifts the macOS Gatekeeper
-   quarantine if present. (Linux-arm64 / Windows: manual install — it tells you.)
+   `tools/sha256.txt` (Perfetto v57.2, ~65MB total).
+2. Resolves a working **Python 3.9+**, skipping broken PATH entries.
+3. **adb**: if the shared resolver finds an explicit override, `.bin/adb`, or a
+   PATH copy, leaves it alone. Otherwise downloads verified Google Platform-Tools
+   37.0.0 into `.bin/` and lifts macOS Gatekeeper quarantine if present.
+   (Linux-arm64 / Windows: manual install — it tells you.)
+
+Checksum verification is mandatory. A mismatched download is deleted and setup
+fails before extraction.
 
 Idempotent — safe to re-run.
 
@@ -24,8 +29,9 @@ Idempotent — safe to re-run.
 |---|---|
 | `setup.sh` | One-time environment prep (see above). |
 | `resolve.sh adb` | Prints the adb path to use. Called by every script. Precedence: `$PERFETTO_TOOLS_ADB` → `.bin/adb` → PATH. |
-| `sha256.txt` | SHA256 of the 5 shipped `trace_processor_shell` binaries. `shasum -a 256 -c tools/sha256.txt` to self-verify. |
-| `trace_processor_shell/` | Prebuilt native binaries (perfetto v49.0): mac-arm64, mac-amd64, linux-amd64, linux-arm64, windows-amd64.exe. Used by `compute_fps.py` so trace analysis needs no network. |
+| `resolve.sh python` | Prints a working Python 3.9+ path. Precedence: `$PERFETTO_TOOLS_PYTHON` → `.venv` → all PATH candidates. |
+| `sha256.txt` | SHA256 of the 5 shipped `trace_processor_shell` binaries. `awk '!/^#/ && NF' tools/sha256.txt \| shasum -a 256 -c -` to self-verify on macOS. |
+| `trace_processor_shell/` | Prebuilt Perfetto v57.2 binaries: mac-arm64, mac-amd64, linux-amd64, linux-arm64, windows-amd64.exe. |
 
 ## How trace_processor_shell is wired in
 
@@ -36,11 +42,13 @@ instead of downloading. `compute_fps.py` itself is unchanged. If the local
 binary is missing or the platform doesn't match, it falls back to the pip
 package's normal download — so analysis never hard-fails.
 
-You still need `pip install perfetto` (the Python SQL client). But the ~12MB
-native binary no longer comes from the network at run time.
+Install the matching Python SQL client with
+`python -m pip install -r requirements.txt`. The native binary does not come
+from the network at run time.
 
 ## Overriding adb
 
 ```bash
 export PERFETTO_TOOLS_ADB=/custom/path/to/adb   # highest precedence
+export PERFETTO_TOOLS_PYTHON=/custom/path/to/python
 ```

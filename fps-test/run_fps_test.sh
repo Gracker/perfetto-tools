@@ -33,6 +33,7 @@ mkdir -p "${OUT_DIR}"
 
 # Locate adb via tools/resolve.sh (env override > .bin/ > PATH).
 ADB="$("${REPO_ROOT}/tools/resolve.sh" adb)"
+PYTHON="$("${REPO_ROOT}/tools/resolve.sh" python)"
 
 TS="$(date +%Y%m%d_%H%M%S)"
 TRACE="${OUT_DIR}/${TS}_fps.perfetto-trace"
@@ -93,7 +94,7 @@ run_swipes() {
     "$ADB" shell input swipe "${x1}" "${y1}" "${x2}" "${y2}" "${dur}" </dev/null
     # Record the post-up (fling) window: device-now .. device-now+gap.
     start_ns="$(device_now_ns)"
-    sleep "$(python3 -c "print(${gap}/1000.0)")"
+    sleep "$("${PYTHON}" -c "print(${gap}/1000.0)")"
     end_ns="$(device_now_ns)"
     echo "${start_ns} ${end_ns}" >> "${SWIPE_LOG}"
   done < "${PATTERN}"
@@ -109,11 +110,11 @@ CAPTURE_PID=""  # reaped; stop the trap from re-signalling
 #    PYTHONPATH includes fps-test/ so sitecustomize.py auto-patches the perfetto
 #    pip package to use the repo's prebuilt trace_processor_shell (no download).
 echo "[fps-test] computing FPS..."
-PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" python3 "${COMPUTE}" \
+PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "${PYTHON}" "${COMPUTE}" \
   "${TRACE}" --swipe-log "${SWIPE_LOG}" || {
   echo ""
   echo "compute_fps.py failed. Common causes:" >&2
-  echo "  - 'perfetto' python package not installed: pip install perfetto" >&2
+  echo "  - 'perfetto' package missing: python -m pip install -r requirements.txt" >&2
   echo "  - no FrameTimeline data (needs Android 12+ and the" >&2
   echo "    android.surfaceflinger.frametimeline data source in 02_jank_frame.pbtx)" >&2
   echo "  - run './tools/setup.sh' to verify the prebuilt trace_processor_shell" >&2

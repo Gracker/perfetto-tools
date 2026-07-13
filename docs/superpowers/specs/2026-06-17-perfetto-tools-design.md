@@ -1,5 +1,9 @@
 # Perfetto Tools — 设计文档
 
+> **Historical baseline:** This was the original design. Current tool pins,
+> capture modes, and verification rules are defined by the
+> [2026-07-13 modernization design](2026-07-13-perfetto-tools-modernization-design.md).
+
 - **日期**: 2026-06-17
 - **状态**: 已确认，待实现
 - **作者**: chris (via ZCode brainstorming)

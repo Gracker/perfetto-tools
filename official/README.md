@@ -17,15 +17,15 @@ optionally opening it in the browser.
 
 ## Current version
 
-See [`VERSION`](VERSION).
+Perfetto v57.2 from the full `main` commit recorded in [`VERSION`](VERSION).
 
 ## Updating
 
 ```bash
-curl -fL https://raw.githubusercontent.com/google/perfetto/master/tools/record_android_trace \
+curl -fL https://raw.githubusercontent.com/google/perfetto/main/tools/record_android_trace \
   -o official/record_android_trace
 chmod +x official/record_android_trace
-# Update the commit hash + date in VERSION
+# Update the full commit hash, embedded tool version, date, and pin tests
 ```
 
 Then re-test `../capture/capture.sh --config general --time 3` on a device.
@@ -38,6 +38,8 @@ Then re-test `../capture/capture.sh --config general --time 3` on a device.
 - `--no-open` returns after pulling the trace without serving/opening it — needed
   when capture is run in the background (e.g. by `fps-test`).
 - `-s <serial>` selects the ADB device when several are attached.
+- Lightweight `-t`/`-b`/`-a` plus category arguments are exposed by
+  `capture/ --categories`; they are not mixed into full-config mode.
 
 ## License
 

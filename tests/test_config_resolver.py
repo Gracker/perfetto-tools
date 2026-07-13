@@ -101,3 +101,14 @@ def test_apply_duration_rejects_nonpositive():
         apply_duration("duration_ms: 1000\n", 0)
     with pytest.raises(ConfigError):
         apply_duration("duration_ms: 1000\n", -5)
+
+
+def test_apply_duration_rejects_nonnumeric_value():
+    with pytest.raises(ConfigError, match="positive seconds"):
+        apply_duration("duration_ms: 1000\n", "ten")
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_apply_duration_rejects_nonfinite_values(value):
+    with pytest.raises(ConfigError, match="finite positive seconds"):
+        apply_duration("duration_ms: 1000\n", value)
