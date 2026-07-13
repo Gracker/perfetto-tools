@@ -63,7 +63,7 @@ SP_RC=0
 wait "${SP_PID}" || SP_RC=$?
 SP_PID=""  # reaped; stop the trap from re-waiting
 if [[ "${SP_RC}" -ne 0 ]]; then
-  cat "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null | tr -d '\r' >&2
+  tr -d '\r' < "${OUT_DIR}/${TS}_sp.stderr" >&2
   echo "" >&2
   echo "ERROR: simpleperf failed." >&2
   if grep -q "not supported on the device" "${OUT_DIR}/${TS}_sp.stderr" 2>/dev/null; then
