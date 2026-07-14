@@ -9,7 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PERFETTO_VERSION = "57.2"
 PERFETTO_PACKAGE_VERSION = "0.57.2"
-PERFETTO_COMMIT = "4f2c163974d699295f4b12ab50139c7a1d69f7f6"
+PERFETTO_COMMIT = "96c76d5ad9a352a216577082de11fed9fa68e561"
 PLATFORM_TOOLS_VERSION = "37.0.0"
 PLATFORM_TOOLS_HASHES = {
     "darwin": "094a1395683c509fd4d48667da0d8b5ef4d42b2abfcd29f2e8149e2f989357c7",
@@ -50,7 +50,7 @@ def test_official_snapshot_is_pinned_to_latest_inspected_main_commit():
     assert metadata["source"].endswith("/google/perfetto/main/tools/record_android_trace")
     assert metadata["commit"] == PERFETTO_COMMIT
     assert metadata["tool_version"] == f"v{PERFETTO_VERSION}"
-    assert metadata["snapshot_date"] == "2026-07-13"
+    assert metadata["snapshot_date"] == "2026-07-14"
 
 
 def test_official_script_embeds_matching_perfetto_prebuilts():
@@ -162,3 +162,26 @@ def test_every_android_tracebox_matches_upstream_manifest_and_checksum_file():
         assert path.stat().st_size == entry["file_size"]
         assert _sha256(path) == entry["sha256"]
         assert checksum_entries[f"tools/tracebox/{name}"] == entry["sha256"]
+
+
+def test_verify_workflow_covers_supported_host_families_and_native_bootstraps():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "verify.yml").read_text()
+
+    for runner in ("ubuntu-latest", "macos-latest", "windows-latest"):
+        assert runner in workflow
+    assert "./tools/setup.sh" in workflow
+    assert r".\tools\setup.ps1" in workflow
+    assert "tools/doctor.py" in workflow
+    assert "capture/capture.sh --list-configs" in workflow
+    assert r"capture\capture.bat --list-configs" in workflow
+    assert "shellcheck" in workflow
+    assert "sha256sum --check" in workflow
+
+
+def test_tool_drift_workflow_is_scheduled_manual_and_isolated():
+    workflow = (REPO_ROOT / ".github" / "workflows" / "tool-drift.yml").read_text()
+
+    assert "schedule:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "tools/check_updates.py --check" in workflow
+    assert "pull_request:" not in workflow

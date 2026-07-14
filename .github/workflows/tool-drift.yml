@@ -1,0 +1,20 @@
+name: Tool drift
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap pinned runtime
+        run: ./tools/setup.sh
+      - name: Check stable tools and helper content
+        run: .venv/bin/python tools/check_updates.py --check

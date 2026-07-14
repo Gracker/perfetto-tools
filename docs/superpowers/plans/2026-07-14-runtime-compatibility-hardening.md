@@ -379,7 +379,7 @@ Expected: all tests pass; doctor reports the host ready and the absent physical 
 - Consumes: authoritative upstream JSON/XML/raw content and the local manifests; optional authorized device.
 - Produces: deterministic `UpdateStatus` records, scheduled/manual drift results, a device-aware smoke plan, and OS-matrix CI evidence.
 
-- [ ] **Step 1: Write failing pure update-comparison tests**
+- [x] **Step 1: Write failing pure update-comparison tests**
 
 ```python
 def test_update_checker_distinguishes_stable_platform_tools_from_canary():
@@ -391,7 +391,7 @@ def test_record_helper_content_drift_fails_even_when_main_commit_only_moves():
     assert compare_record_helper(local_sha="a", remote_sha="b").current is False
 ```
 
-- [ ] **Step 2: Verify RED, then implement endpoint adapters and pure comparisons**
+- [x] **Step 2: Verify RED, then implement endpoint adapters and pure comparisons**
 
 Run: `python -m pytest tests/test_update_checker.py -v`
 
@@ -399,7 +399,7 @@ Expected RED: checker module absent.
 
 Network adapters use PyPI JSON, GitHub release/commit APIs, Android repository/release metadata, and the raw record helper. `--check` returns non-zero on stable/content drift; canary availability is informational.
 
-- [ ] **Step 3: Write failing device-smoke plan tests**
+- [x] **Step 3: Write failing device-smoke plan tests**
 
 ```python
 @pytest.mark.parametrize(("api", "configs"), [
@@ -411,27 +411,27 @@ def test_device_smoke_plan_matches_android_capabilities(api, configs):
     assert [item.config for item in build_smoke_plan(api)] == configs
 ```
 
-- [ ] **Step 4: Implement physical-device smoke command**
+- [x] **Step 4: Implement physical-device smoke command**
 
 Each planned config captures one second with `--no-open` into a temporary
 directory, requires a non-empty trace, reports per-config PASS/FAIL, and removes
 temporary output. No device prints `NOT AVAILABLE` and exits 4 when
 `--require-device` is supplied.
 
-- [ ] **Step 5: Expand Verify to an OS matrix**
+- [x] **Step 5: Expand Verify to an OS matrix**
 
 Use Ubuntu, macOS, and Windows jobs. Every job installs through the native setup,
 runs full pytest, doctor, the host trace-processor version smoke, and the native
 capture list command. Ubuntu additionally runs `bash -n`, ShellCheck, and all
 artifact hashes.
 
-- [ ] **Step 6: Add isolated weekly/manual drift workflow**
+- [x] **Step 6: Add isolated weekly/manual drift workflow**
 
 The workflow runs `python tools/check_updates.py --check` on a schedule and
 `workflow_dispatch`. It is separate from push/PR verification so mutable
 upstream state cannot make a source commit nondeterministic.
 
-- [ ] **Step 7: Run focused automation tests and parse both workflows**
+- [x] **Step 7: Run focused automation tests and parse both workflows**
 
 Run:
 

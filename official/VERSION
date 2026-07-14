@@ -1,8 +1,8 @@
 source: https://raw.githubusercontent.com/google/perfetto/main/tools/record_android_trace
 repo:  https://github.com/google/perfetto
-commit: 4f2c163974d699295f4b12ab50139c7a1d69f7f6
+commit: 96c76d5ad9a352a216577082de11fed9fa68e561
 tool_version: v57.2
-snapshot_date: 2026-07-13
+snapshot_date: 2026-07-14
 
 To update:
   curl -fL https://raw.githubusercontent.com/google/perfetto/main/tools/record_android_trace \
