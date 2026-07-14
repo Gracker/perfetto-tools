@@ -12,3 +12,10 @@ c0f61397901da47cbe1bb9a0843624f7c2038ac92176ce15e3736ce9aa0afef0  tools/trace_pr
 55ba613fc6d4f71df81eee2dbfc293020063655c241b3e314bff75345b802684  tools/trace_processor_shell/linux-amd64
 1dcc1d9aaff2eb92e8bc58f1957e4e445600294bd61dbc09345c1018c5ff0868  tools/trace_processor_shell/linux-arm64
 100334b6091596fbc97f872556849a5747bf47a7f7190c485ba8cea8d2409c7b  tools/trace_processor_shell/windows-amd64.exe
+
+# Android tracebox v57.2 for offline legacy capture (API 23-28, selected API 29).
+# Source URLs and checksums are embedded in official/record_android_trace.
+d53456f9c857c58e2410eeda3710aac7596059d5c9f509d66f962f41280b7f3a  tools/tracebox/android-arm
+1f3fdf7c23134eb6ef7393ea914b3ea8c0acb74c46230282366b3cb4502b6b7c  tools/tracebox/android-arm64
+3bbe1fb8d6d51e695914d91ccbe3677b489b2ab171f2ad10a7b0a0ddd95e90ef  tools/tracebox/android-x86
+eace8af8734d420d6e8245f968bfb41ed334364d29bc8ac3be15dc1206714239  tools/tracebox/android-x64

@@ -34,6 +34,7 @@ from perfetto_tools.runtime import (  # noqa: E402
     probe_device,
     resolve_adb,
     select_device,
+    tracebox_for_device,
 )
 
 
@@ -53,9 +54,55 @@ def normalize_lightweight_duration(value):
     return f"{number}{unit or 's'}"
 
 
+def normalize_buffer_size(value):
+    """Return a normalized positive Perfetto ring-buffer size."""
+    normalized = str(value).strip().lower()
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(mb|gb)", normalized)
+    if not match or float(match.group(1)) <= 0:
+        raise ConfigError(
+            f"--buffer must be a positive number followed by mb or gb, got {value!r}"
+        )
+    return normalized
+
+
+def validate_category(value):
+    """Reject empty category/event tokens and embedded shell/control spacing."""
+    value = str(value)
+    if not value or value.startswith("-") or re.search(r"[\s\x00-\x1f\x7f]", value):
+        raise ConfigError(
+            f"Invalid category {value!r}; use one non-empty token without whitespace "
+            "or a leading hyphen"
+        )
+    return value
+
+
+def validate_app(value):
+    """Validate an atrace app/package identifier or the supported `*` wildcard."""
+    value = str(value)
+    if value != "*" and not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:$-]*", value):
+        raise ConfigError(
+            f"Invalid --app value {value!r}; use an Android app identifier or '*'"
+        )
+    return value
+
+
+def validate_output_path(value):
+    """Validate the file destination before any device-side action."""
+    output = Path(value).expanduser()
+    if output.exists() and output.is_dir():
+        raise ConfigError(f"output path is a directory, expected a trace file: {output}")
+    parent = output.parent
+    if not parent.is_dir():
+        raise ConfigError(f"output parent is not an existing directory: {parent}")
+    if not os.access(parent, os.W_OK):
+        raise ConfigError(f"output parent is not writable: {parent}")
+    return str(output)
+
+
 _CONFIGS_DIR = _REPO_ROOT / "configs"
 _OFFICIAL = _REPO_ROOT / "official" / "record_android_trace"
 _TRACES_DIR = _REPO_ROOT / "traces"
+_TRACEBOX_DIR = _REPO_ROOT / "tools" / "tracebox"
 
 
 def list_configs(configs_dir=None):
@@ -193,26 +240,22 @@ def prepare_device(args, feature):
     return adb_path, info, warnings
 
 
-def build_official_command(args, output, config_path=None):
+def build_official_command(args, output, config_path=None, sideload_path=None):
     """Build the argv for preset-config or lightweight-category capture."""
+    cmd = [sys.executable, str(_OFFICIAL)]
+    if sideload_path:
+        cmd += ["--sideload-path", str(sideload_path)]
     if config_path:
         if args.app or args.buffer:
             raise ConfigError(
                 "--app and --buffer are only valid with --categories; "
                 "edit the selected pbtxt for equivalent preset-mode control"
             )
-        cmd = [
-            sys.executable,
-            str(_OFFICIAL),
-            "-c",
-            config_path,
-            "-o",
-            output,
-        ]
+        cmd += ["-c", config_path, "-o", output]
     else:
         if not args.categories:
             raise ConfigError("--categories requires at least one Perfetto category")
-        cmd = [sys.executable, str(_OFFICIAL), "-o", output]
+        cmd += ["-o", output]
         if args.time:
             cmd += ["-t", normalize_lightweight_duration(args.time)]
         if args.buffer:
@@ -239,8 +282,36 @@ def validate_capture_mode_args(args, config_path):
             )
         if args.time:
             _positive_preset_seconds(args.time)
-    elif args.time:
-        normalize_lightweight_duration(args.time)
+    else:
+        if args.time:
+            normalize_lightweight_duration(args.time)
+        if args.buffer:
+            args.buffer = normalize_buffer_size(args.buffer)
+        args.categories = [validate_category(value) for value in args.categories]
+        args.app = [validate_app(value) for value in args.app]
+    if args.output:
+        args.output = validate_output_path(args.output)
+
+
+def validate_list_mode_args(args):
+    """Reject silently ignored capture options in local/device listing modes."""
+    if not (args.list_configs or args.list_categories):
+        return
+    invalid = [
+        flag
+        for flag, used in (
+            ("--time", args.time is not None),
+            ("--buffer", args.buffer is not None),
+            ("--app", bool(args.app)),
+            ("--output", args.output is not None),
+            ("--no-open", args.no_open),
+            ("--serial", args.list_configs and args.serial is not None),
+        )
+        if used
+    ]
+    if invalid:
+        mode = "--list-configs" if args.list_configs else "--list-categories"
+        raise ConfigError(f"{mode} cannot be combined with {', '.join(invalid)}")
 
 
 def run_capture(args):
@@ -268,6 +339,7 @@ def run_capture(args):
         stem = Path(config_path).stem if config_path else "categories"
         _TRACES_DIR.mkdir(exist_ok=True)
         out = str(_TRACES_DIR / f"{ts}_{stem}.perfetto-trace")
+    out = validate_output_path(out)
 
     # Print what we resolved before the device check, so a no-device smoke test
     # still shows the wiring is correct up to adb.
@@ -283,14 +355,21 @@ def run_capture(args):
     print(f"[capture] output : {out}")
 
     feature = Path(config_path).stem if config_path else "categories"
-    adb_path, _info, _warnings = prepare_device(args, feature)
+    adb_path, info, _warnings = prepare_device(args, feature)
+    sideload_path = tracebox_for_device(info, _TRACEBOX_DIR)
+    if sideload_path and not sideload_path.is_file():
+        raise RuntimeFailure(
+            f"Bundled legacy tracebox is missing: {sideload_path}. "
+            "Restore repository artifacts and rerun setup.",
+            3,
+        )
 
     # --time is honored by rewriting duration_ms into a temp config, because
     # record_android_trace ignores -t when -c is given. Falls through to the
     # config's own duration_ms when --time is absent.
     run_config = materialize_config(config_path, args.time) if config_path else None
     is_temp = bool(config_path and run_config != config_path)
-    cmd = build_official_command(args, out, run_config)
+    cmd = build_official_command(args, out, run_config, sideload_path)
 
     print(f"[capture] running: {' '.join(cmd)}")
     try:
@@ -347,6 +426,7 @@ def main(argv=None):
         )
         return 2
     try:
+        validate_list_mode_args(args)
         return run_capture(args)
     except ConfigError as e:
         print(f"ERROR: {e}", file=sys.stderr)

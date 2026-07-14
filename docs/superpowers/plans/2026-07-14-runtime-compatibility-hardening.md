@@ -240,7 +240,7 @@ Expected: all pass with no uncaught subprocess exceptions.
 - Consumes: validated CLI arguments and `DeviceInfo` from Task 2.
 - Produces: `normalize_buffer_size()`, `validate_category()`, `validate_app()`, `validate_output_path()`, and an upstream command containing `--sideload-path` when required.
 
-- [ ] **Step 1: Write failing argument-boundary tests**
+- [x] **Step 1: Write failing argument-boundary tests**
 
 ```python
 @pytest.mark.parametrize("value", ["", "32", "-1mb", "32kb", "nanmb"])
@@ -259,17 +259,17 @@ def test_output_parent_failure_is_user_facing(tmp_path):
         validate_output_path(non_directory / "trace.perfetto-trace")
 ```
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run: `python -m pytest tests/test_capture_modes.py -v`
 
 Expected: FAIL because the new validators and list-mode rejection are absent.
 
-- [ ] **Step 3: Implement minimal pre-device validation**
+- [x] **Step 3: Implement minimal pre-device validation**
 
 Accept only positive `mb`/`gb` buffer values, non-empty app identifiers or `*`, category/ftrace tokens without whitespace/control characters, and writable output parents. Reject capture-only arguments in listing modes before resolving ADB.
 
-- [ ] **Step 4: Add failing bundled-tracebox integrity tests**
+- [x] **Step 4: Add failing bundled-tracebox integrity tests**
 
 ```python
 def test_every_android_tracebox_matches_upstream_manifest_and_checksum_file():
@@ -277,7 +277,7 @@ def test_every_android_tracebox_matches_upstream_manifest_and_checksum_file():
     assert all(local_sha[name] == upstream_manifest_sha[name] for name in tracebox_names)
 ```
 
-- [ ] **Step 5: Verify RED, then add the four official v57.2 artifacts**
+- [x] **Step 5: Verify RED, then add the four official v57.2 artifacts**
 
 Run: `python -m pytest tests/test_tool_pins.py -v`
 
@@ -285,14 +285,14 @@ Expected RED: missing local tracebox files/checksum entries.
 
 Download from the exact v57.2 URLs embedded in `official/record_android_trace`, verify the embedded SHA256 values, mark binaries in `.gitattributes`, and record them in `tools/sha256.txt`.
 
-- [ ] **Step 6: Add local sideload command behavior**
+- [x] **Step 6: Add local sideload command behavior**
 
 `build_official_command(args, output, config_path=None, sideload_path=None)`
 inserts `--sideload-path` followed by the selected repository file before the
 config/categories. Tests cover API 23 and stopped-service API 29 selection
 without running ADB.
 
-- [ ] **Step 7: Run focused tests and checksum verification**
+- [x] **Step 7: Run focused tests and checksum verification**
 
 Run:
 

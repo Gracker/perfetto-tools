@@ -3,3 +3,6 @@
 # so a `git archive` tarball doesn't ship about 65MB of binaries.
 trace_processor_shell/* binary
 trace_processor_shell/* export-ignore
+
+# On-device Perfetto tracebox binaries for legacy Android capture.
+tracebox/* binary

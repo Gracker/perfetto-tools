@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import platform
 import re
@@ -79,9 +80,10 @@ def test_every_bundled_trace_processor_matches_recorded_sha256():
             continue
         expected, relative_path = line.split(maxsplit=1)
         path = REPO_ROOT / relative_path
-        entries.append(path)
         assert path.is_file()
         assert _sha256(path) == expected
+        if relative_path.startswith("tools/trace_processor_shell/"):
+            entries.append(path)
 
     assert {path.name for path in entries} == {
         "mac-amd64",
@@ -126,3 +128,37 @@ def test_setup_delegates_host_tool_installation_to_shared_runtime():
     assert 'setup_runtime.py" "$@"' in setup
     assert "ensure_platform_tools" in setup_runtime
     assert 'shutil.which("adb")' not in setup_runtime
+
+
+def test_every_android_tracebox_matches_upstream_manifest_and_checksum_file():
+    official_source = (REPO_ROOT / "official" / "record_android_trace").read_text()
+    tree = ast.parse(official_source)
+    assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "TRACEBOX_MANIFEST"
+            for target in node.targets
+        )
+    )
+    manifest = ast.literal_eval(assignment.value)
+    upstream = {
+        entry["arch"]: entry for entry in manifest if entry["arch"].startswith("android-")
+    }
+    tracebox_dir = REPO_ROOT / "tools" / "tracebox"
+    local = {path.name: path for path in tracebox_dir.glob("android-*")}
+
+    checksum_entries = {}
+    for line in (REPO_ROOT / "tools" / "sha256.txt").read_text().splitlines():
+        if line and not line.startswith("#"):
+            sha256, relative = line.split(maxsplit=1)
+            checksum_entries[relative] = sha256
+
+    assert set(local) == {"android-arm", "android-arm64", "android-x86", "android-x64"}
+    assert set(upstream) == set(local)
+    for name, path in local.items():
+        entry = upstream[name]
+        assert path.stat().st_size == entry["file_size"]
+        assert _sha256(path) == entry["sha256"]
+        assert checksum_entries[f"tools/tracebox/{name}"] == entry["sha256"]

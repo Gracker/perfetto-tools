@@ -14,8 +14,12 @@ from perfetto_capture import (  # noqa: E402
     build_official_command,
     build_parser,
     main,
+    normalize_buffer_size,
     normalize_lightweight_duration,
     prepare_device,
+    validate_app,
+    validate_category,
+    validate_output_path,
 )
 
 
@@ -163,3 +167,66 @@ def test_main_preserves_runtime_failure_exit_code(capsys, monkeypatch):
 
     assert main(["--config", "general"]) == 4
     assert "ERROR: device is offline; reconnect it" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["", "32", "-1mb", "32kb", "nanmb", "0gb"])
+def test_buffer_rejects_invalid_values(value):
+    with pytest.raises(ConfigError, match="positive.*mb or gb"):
+        normalize_buffer_size(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"), [("32MB", "32mb"), ("1.5gb", "1.5gb")]
+)
+def test_buffer_normalizes_valid_values(value, expected):
+    assert normalize_buffer_size(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "sched switch", "gfx\nview", "\x00bad", "--list"])
+def test_category_rejects_empty_whitespace_or_control_characters(value):
+    with pytest.raises(ConfigError, match="category"):
+        validate_category(value)
+
+
+@pytest.mark.parametrize("value", ["", "com.example bad", "-bad", "bad/actor"])
+def test_app_rejects_invalid_identifier(value):
+    with pytest.raises(ConfigError, match="app"):
+        validate_app(value)
+
+
+@pytest.mark.parametrize("value", ["*", "com.example.app", "com.example:worker"])
+def test_app_accepts_supported_identifier(value):
+    assert validate_app(value) == value
+
+
+def test_list_mode_rejects_capture_only_flags_before_device_access(capsys):
+    result = main(["--list-configs", "--time", "10"])
+
+    assert result == 2
+    assert "--time" in capsys.readouterr().err
+
+
+def test_output_parent_failure_is_user_facing(tmp_path):
+    non_directory = tmp_path / "not-a-directory"
+    non_directory.write_text("occupied")
+
+    with pytest.raises(ConfigError, match="output parent"):
+        validate_output_path(non_directory / "trace.perfetto-trace")
+
+
+def test_build_official_command_includes_local_sideload_before_config():
+    args = _args(no_open=True, serial="legacy-device")
+
+    command = build_official_command(
+        args,
+        output="trace.perfetto-trace",
+        config_path="config.pbtx",
+        sideload_path="/repo/tools/tracebox/android-arm64",
+    )
+
+    assert command[2:6] == [
+        "--sideload-path",
+        "/repo/tools/tracebox/android-arm64",
+        "-c",
+        "config.pbtx",
+    ]
