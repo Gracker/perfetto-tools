@@ -44,11 +44,10 @@ from __future__ import annotations
 
 import sys
 
-if sys.version_info < (3, 9):
+if sys.version_info < (3, 10):
     sys.exit(
-        "compute_fps.py requires Python 3.9+ "
-        f"(running {sys.version.split()[0]}). "
-        "Uses str.removesuffix() and dataclass features added in 3.9."
+        "compute_fps.py requires Python 3.10-3.14 "
+        f"(running {sys.version.split()[0]}). Run the repository setup first."
     )
 
 from dataclasses import dataclass, field
@@ -405,6 +404,9 @@ def analyze_trace(trace_path, swipe_log=None):
 
     swipe_log: optional list of (start_ns, end_ns) device-realtime tuples (tier-3).
     """
+    from _tp_shell_patch import install as install_local_trace_processor
+
+    install_local_trace_processor()
     from perfetto.trace_processor import TraceProcessor
 
     tp = TraceProcessor(trace=str(trace_path))

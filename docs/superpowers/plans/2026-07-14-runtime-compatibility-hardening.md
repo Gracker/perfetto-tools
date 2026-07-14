@@ -317,7 +317,7 @@ Expected: all capture tests and all nine artifact checks pass.
 - Consumes: shared runtime checks, managed package metadata, artifact hashes, optional device requirement.
 - Produces: `doctor.collect_checks(require_device: bool) -> list[Check]`, human and JSON output, and deterministic FPS preflight/readiness behavior.
 
-- [ ] **Step 1: Write failing doctor result tests**
+- [x] **Step 1: Write failing doctor result tests**
 
 ```python
 def test_doctor_reports_wrong_perfetto_version_as_failure():
@@ -329,29 +329,29 @@ def test_doctor_without_device_reports_not_available_not_pass():
     assert device_check(checks).status == "NOT AVAILABLE"
 ```
 
-- [ ] **Step 2: Run focused doctor tests and verify RED**
+- [x] **Step 2: Run focused doctor tests and verify RED**
 
 Run: `python -m pytest tests/test_doctor.py -v`
 
 Expected: import failure because `tools/doctor.py` does not exist.
 
-- [ ] **Step 3: Implement doctor checks and exit semantics**
+- [x] **Step 3: Implement doctor checks and exit semantics**
 
 Host readiness checks managed Python/package versions, artifact hashes, host trace processor execution, ADB path/version/source, and writable traces directory. `--device` additionally requires one authorized supported device. Human output uses `PASS`, `WARN`, `FAIL`, and `NOT AVAILABLE`; `--json` emits the same structured results. Any FAIL returns 3 or 4 according to host/device class.
 
-- [ ] **Step 4: Write failing local trace-processor delegate tests**
+- [x] **Step 4: Write failing local trace-processor delegate tests**
 
 Prove the platform-to-binary mapping, prove missing supported-host binary raises a clear local error, and prove `sitecustomize.py` imports the single implementation from `_tp_shell_patch.py` rather than duplicating it.
 
-- [ ] **Step 5: Replace silent network fallback with fail-closed local analysis**
+- [x] **Step 5: Replace silent network fallback with fail-closed local analysis**
 
 `_LocalShellDelegate.get_shell_path()` returns a verified local binary or raises an actionable error directing the user to `tools/setup`. `sitecustomize.py` becomes a minimal import of `_tp_shell_patch`; no normal analysis path downloads a trace processor.
 
-- [ ] **Step 6: Harden FPS startup and cleanup**
+- [x] **Step 6: Harden FPS startup and cleanup**
 
 Before starting capture, check exact Perfetto package version, validate numeric duration/package syntax, and run doctor device compatibility. Trap `EXIT`, `INT`, and `TERM` so every failure reaps the tracer. Poll the capture log/process for the upstream `Trace started` marker with a bounded timeout instead of sleeping a fixed two seconds; fail before swipes if capture exits.
 
-- [ ] **Step 7: Run doctor, patch, and shell verification**
+- [x] **Step 7: Run doctor, patch, and shell verification**
 
 Run:
 

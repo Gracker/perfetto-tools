@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import os
 import platform
@@ -21,6 +20,14 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 BIN_DIR = REPO_ROOT / ".bin"
 VERSIONS_FILE = SCRIPT_DIR / "tool-versions.env"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from perfetto_tools.artifacts import (  # noqa: E402
+    ArtifactFailure,
+    sha256_file,
+    verify_bundled_artifacts as verify_artifacts,
+)
 
 
 class SetupError(Exception):
@@ -40,35 +47,11 @@ def read_env_manifest(path: Path = VERSIONS_FILE) -> dict[str, str]:
     return values
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def verify_bundled_artifacts(repo_root: Path = REPO_ROOT) -> list[str]:
-    verified: list[str] = []
-    checksum_file = repo_root / "tools" / "sha256.txt"
-    for raw_line in checksum_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        expected, relative = line.split(maxsplit=1)
-        artifact = repo_root / relative
-        if not artifact.is_file():
-            raise SetupError(f"Bundled artifact missing: {relative}")
-        actual = sha256_file(artifact)
-        if actual != expected:
-            raise SetupError(
-                f"Bundled artifact checksum mismatch: {relative}\n"
-                f"  expected {expected}\n  actual   {actual}"
-            )
-        verified.append(relative)
-    if not verified:
-        raise SetupError("No bundled artifact checksums were found")
-    return verified
+    try:
+        return [str(path.relative_to(repo_root)) for path in verify_artifacts(repo_root)]
+    except ArtifactFailure as exc:
+        raise SetupError(str(exc)) from exc
 
 
 def verify_python_environment(versions: dict[str, str]) -> None:
