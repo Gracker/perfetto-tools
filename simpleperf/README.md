@@ -2,6 +2,11 @@
 
 Two independent shell scripts.
 
+These are Mac/Linux Bash orchestrators. Run `./tools/setup.sh` from the
+repository root first. Windows supports the core Perfetto capture/analysis path,
+but these Simpleperf wrappers are not a Windows interface. Linux ARM64 also
+needs an explicit external ADB.
+
 ## simpleperf_only.sh
 
 Standalone CPU profile of an app's main process.
@@ -35,6 +40,9 @@ Outputs both `traces/simpleperf_<ts>.data` and `traces/<ts>_cpu.perfetto-trace`.
   non-debuggable/release apps.
 - `adb` + `simpleperf` on the device (simpleperf ships with the system image on
   modern Android; otherwise push from the NDK).
+- The repository can manage ADB on macOS and Linux glibc x86_64, but it cannot
+  bundle device root/debuggable state, OEM kernel policy, or the NDK reporting
+  scripts.
 
 ### Device kernel may block simpleperf entirely (important)
 

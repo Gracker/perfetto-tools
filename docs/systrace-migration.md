@@ -5,12 +5,21 @@ should be captured with Perfetto and opened in the Perfetto UI. This repository
 does not bundle or emulate `systrace.py`; it provides two maintained Perfetto
 capture modes instead.
 
+Old copies under `platform-tools/systrace/`, Python 2 launch wrappers, and scripts
+that generate self-contained `trace.html` files are historical inputs, not tools
+to vendor back into a current SDK. Keeping an old executable also keeps its old
+ADB/category/parser assumptions and does not restore platform support.
+
+Run the repository bootstrap first (`./tools/setup.sh` or Windows
+`tools\setup.ps1`). The lightweight replacement below then uses the pinned
+official Perfetto helper and the same device-state/API checks as preset capture.
+
 ## Choose the replacement
 
 | Old workflow | Current replacement |
 |---|---|
-| `systrace.py` with common categories | `capture.sh --categories ...` |
-| Repeatable scenario config | `capture.sh --config ...` |
+| `systrace.py`, SDK `systrace` launcher, or copied legacy wrapper | `capture.sh --categories ...` |
+| Hand-maintained long category command | Versioned `capture.sh --config ...` preset |
 | Interactive probe selection | Perfetto UI → **Record new trace** |
 | On-device recording | Android **System Tracing** developer option/tile |
 | Open generated `trace.html` | Open `.perfetto-trace` at `https://ui.perfetto.dev` |
@@ -18,6 +27,8 @@ capture modes instead.
 The repository's preset configs are the preferred path for repeatable startup,
 jank, CPU, and memory investigations. Lightweight category mode exists for old
 Systrace command lines and quick ad-hoc captures.
+On Windows x86_64, use `capture\capture.bat` in place of
+`./capture/capture.sh`; the flags are the same.
 
 ## Command migration
 
@@ -49,6 +60,7 @@ Useful mappings:
 | trailing categories | `--categories category ...` |
 | `--list-categories` | `--list-categories` (queries the connected device) |
 | HTML output | binary `.perfetto-trace` output |
+| copied `systrace.py` / Python 2 environment | repository-managed Python + pinned `record_android_trace` |
 
 For a maintained full config instead:
 
@@ -73,13 +85,22 @@ For app code, AndroidX Tracing is the current high-level instrumentation API.
 
 ## Android version boundaries
 
-- The official `record_android_trace` helper supports Android M+ and can
-  sideload `tracebox` where the system Perfetto service is unavailable.
-- This repository's base presets target Android 10+.
-- FrameTimeline-based jank/FPS analysis requires Android 12+ (API 31+).
-- The on-device System Tracing app exists on Android 9+. Android 10+ records
-  Perfetto format; Android 9 records the older Systrace format, which Perfetto UI
-  can still open for analysis.
+| API | Maintained repository path |
+|---|---|
+| 22 and older | Unsupported; keep a historical trace for analysis rather than restoring `systrace.py` |
+| 23–28 | Perfetto helper + repository-bundled ABI-specific tracebox; base capture is OEM/ftrace best effort |
+| 29 | System Perfetto when `traced` runs, bundled tracebox otherwise |
+| 30 | System Perfetto; no FrameTimeline FPS yet |
+| 31+ | System Perfetto with FrameTimeline jank/FPS support |
+
+The on-device System Tracing app exists on Android 9+. Android 10+ records
+Perfetto format; Android 9 records the older Systrace format, which Perfetto UI
+can still open for analysis. That file compatibility is not a reason to use the
+removed host collector for new traces.
+
+The repository ships the legacy Android tracebox binaries recorded in the
+official v57.2 manifest and passes `--sideload-path`; normal legacy capture does
+not download them. See the full [compatibility matrix](compatibility.md).
 
 For supported capture details, use the upstream guides:
 

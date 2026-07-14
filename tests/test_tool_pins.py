@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PERFETTO_VERSION = "57.2"
 PERFETTO_PACKAGE_VERSION = "0.57.2"
 PERFETTO_COMMIT = "96c76d5ad9a352a216577082de11fed9fa68e561"
+RECORD_HELPER_SHA256 = "377178a17bb87272e46616ad0e7b5814ea09037ba0a2ee55bf9c242d592b1559"
 PLATFORM_TOOLS_VERSION = "37.0.0"
 PLATFORM_TOOLS_HASHES = {
     "darwin": "094a1395683c509fd4d48667da0d8b5ef4d42b2abfcd29f2e8149e2f989357c7",
@@ -51,6 +52,8 @@ def test_official_snapshot_is_pinned_to_latest_inspected_main_commit():
     assert metadata["commit"] == PERFETTO_COMMIT
     assert metadata["tool_version"] == f"v{PERFETTO_VERSION}"
     assert metadata["snapshot_date"] == "2026-07-14"
+    assert metadata["sha256"] == RECORD_HELPER_SHA256
+    assert _sha256(REPO_ROOT / "official" / "record_android_trace") == RECORD_HELPER_SHA256
 
 
 def test_official_script_embeds_matching_perfetto_prebuilts():

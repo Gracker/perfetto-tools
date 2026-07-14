@@ -1,5 +1,9 @@
 # Perfetto Tools Implementation Plan
 
+> Original historical plan. Commands and prerequisites below are preserved as
+> project history and must not be used as current setup instructions. See
+> `docs/compatibility.md` and the 2026-07-14 plan.
+
 > **Historical baseline:** This plan records the initial implementation. Use the
 > [2026-07-13 modernization plan](2026-07-13-perfetto-tools-modernization.md) for
 > current versions, capture modes, and verification commands.

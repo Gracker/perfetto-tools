@@ -4,6 +4,10 @@ One-shot trace capture on a connected Android device. Wraps the pinned official
 `record_android_trace` with two explicit modes: full preset configs and
 lightweight Perfetto categories.
 
+Run the repository's native setup and `tools/doctor.py` first. Capture performs
+a bounded ADB/device/API preflight and uses stable exit classes: argument errors
+(`2`), host setup (`3`), device state (`4`), and Android incompatibility (`5`).
+
 ## Usage
 
 Mac / Linux:
@@ -19,6 +23,9 @@ Windows:
 ```bat
 capture.bat --config general --time 10
 ```
+
+For strictly offline capture, pass `--no-open`; otherwise the completed trace is
+opened with `ui.perfetto.dev`.
 
 ## Options
 
@@ -59,6 +66,15 @@ mappings.
 
 ## Requirements
 
-- `adb` resolvable by `../tools/resolve.sh`, one device connected and authorized.
-- Python 3.9+.
-- The archived official script at `../official/record_android_trace` (included).
+- `../tools/setup.sh` on Mac/Linux or `../tools/setup.ps1` on Windows x86_64.
+- One connected Android 6+ device in ADB state `device`. Unauthorized, offline,
+  no-permission, zero-device, and multi-device states have distinct guidance.
+- API 23–28 uses the bundled v57.2 tracebox. API 29 uses system Perfetto when
+  `traced` is running and the bundled tracebox otherwise. No tracebox is fetched
+  during normal capture.
+- Jank/FPS configs require Android 12 / API 31. Other presets on legacy devices
+  are best effort because OEM ftrace events vary.
+- Linux ARM64 capture requires an external `PERFETTO_TOOLS_ADB`; Windows supports
+  this core capture entry but not the Bash FPS/Simpleperf orchestration.
+
+See [`../docs/compatibility.md`](../docs/compatibility.md) for the full matrix.

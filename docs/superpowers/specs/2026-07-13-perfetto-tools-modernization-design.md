@@ -1,5 +1,10 @@
 # Perfetto Tools Modernization Design
 
+> Historical snapshot, superseded by the 2026-07-14 runtime-hardening design.
+> Version/Python/setup statements below describe the audited baseline or that
+> completed migration, not the current support contract. See
+> `docs/compatibility.md` for current truth.
+
 **Date:** 2026-07-13
 
 ## Goal

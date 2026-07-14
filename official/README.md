@@ -4,10 +4,10 @@ This directory holds a pinned snapshot of Google's `record_android_trace` script
 from the [perfetto](https://github.com/google/perfetto) repo. It is used at
 runtime by `../capture/` and `../fps-test/`.
 
-It is an amalgamated, self-contained Python script (no pip dependencies) that
-handles: locating adb, sideloading tracebox on older devices, pushing the config,
-running `perfetto --background`, polling for completion, pulling the trace, and
-optionally opening it in the browser.
+It is an amalgamated Python script that handles ADB capture, config upload,
+polling, trace pull, and optional browser opening. The repository wrapper owns
+ADB selection and supplies one of the bundled tracebox binaries on legacy
+Android, preventing the helper's normal first-use tracebox download.
 
 ## Why a snapshot
 
@@ -17,7 +17,9 @@ optionally opening it in the browser.
 
 ## Current version
 
-Perfetto v57.2 from the full `main` commit recorded in [`VERSION`](VERSION).
+Perfetto v57.2. [`VERSION`](VERSION) records the full inspected `main` commit,
+snapshot date, and helper SHA256. The latest inspected main commit moved while
+the helper content remained byte-for-byte unchanged; both facts are retained.
 
 ## Updating
 
@@ -25,10 +27,13 @@ Perfetto v57.2 from the full `main` commit recorded in [`VERSION`](VERSION).
 curl -fL https://raw.githubusercontent.com/google/perfetto/main/tools/record_android_trace \
   -o official/record_android_trace
 chmod +x official/record_android_trace
-# Update the full commit hash, embedded tool version, date, and pin tests
+shasum -a 256 official/record_android_trace
+# Update the full commit hash, embedded tool version, date, SHA256, and pin tests
 ```
 
 Then re-test `../capture/capture.sh --config general --time 3` on a device.
+`../tools/check_updates.py --check` automates the stable/content comparison and
+treats unrelated main-branch movement as informational when the bytes match.
 
 ## Important interface notes (used by `capture/` and `fps-test/`)
 

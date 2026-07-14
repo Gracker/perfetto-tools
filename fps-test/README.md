@@ -2,7 +2,7 @@
 
 Automated scroll-smoothness test: captures a Perfetto trace while running a
 fixed swipe pattern (3 up, 3 down), then computes FPS and dropped frames over
-the fling (finger-up) phases only.
+overall, press, and fling phases.
 
 ## Usage
 
@@ -10,11 +10,16 @@ the fling (finger-up) phases only.
 2. Run:
 
 ```bash
-python -m pip install -r requirements.txt  # run from the repository root
+./tools/setup.sh                           # once, from repository root
 ./fps-test/run_fps_test.sh                 # 12s default
 ./fps-test/run_fps_test.sh 16              # 16s (slow device / longer swipe pattern)
 ./fps-test/run_fps_test.sh 12 com.example.app   # + gfxinfo/SurfaceFlinger cross-check
 ```
+
+The runner validates its arguments, runs `doctor.py --device --feature fps`, and
+waits for the capture's real `Trace started` marker before the first swipe. It
+does not use a fixed startup sleep. `EXIT`, `INT`, and `TERM` all reap the
+background tracer.
 
 3. Output (in `traces/`):
    - `<ts>_fps.perfetto-trace` — the raw trace (open at ui.perfetto.dev)
@@ -100,14 +105,16 @@ Gesture sources, 3-tier fallback (first non-empty wins):
 ## trace_processor_shell (no run-time download)
 
 The native `trace_processor_shell` binary ships in [`../tools/trace_processor_shell/`](../tools/trace_processor_shell/)
-(5 platforms, ~50MB). `run_fps_test.sh` sets `PYTHONPATH` so a preload hook
+(5 platforms, ~65MB). `run_fps_test.sh` sets `PYTHONPATH` so a preload hook
 (`_tp_shell_patch.py`) patches the `perfetto` pip package to use that local
 binary instead of downloading it. Run `./tools/setup.sh` once to verify the
 binaries' checksums.
 
-Install the pinned `perfetto==0.57.2` Python SQL client from
-`../requirements.txt`. The matching v57.2 native binary stays local, avoiding
-runtime downloads and client/binary version drift.
+The preload file `sitecustomize.py` only imports the shared patch; analysis also
+installs it explicitly. A missing, unsupported, or checksum-mismatched binary
+fails with setup guidance instead of falling back to a network download. The
+managed environment contains the exact `perfetto==0.57.2` client matching the
+v57.2 native binary.
 
 ## Auxiliary cross-check: `dump_gfxinfo.sh`
 
@@ -139,10 +146,12 @@ device resolution (defaults target ~1264×2800). Format per line:
 
 ## Requirements
 
-- `adb`, one connected device.
-- Python 3.9+ with `python -m pip install -r requirements.txt` from repo root.
-- The archived official script at `../official/` (included).
-- FrameTimeline needs Android 12 (API 31)+.
+- Mac/Linux with `../tools/setup.sh`; the Bash runner is not a Windows entrypoint.
+- One authorized Android 12 / API 31+ device. Unauthorized/offline/multiple
+  device states fail during doctor preflight before capture.
+- Linux ARM64 additionally needs an explicit external ADB.
+- The managed Python/packages, official helper, config, trace processor, and
+  Android tracebox artifacts are repository-owned after setup.
 
 ## Known limitations / implementation status
 

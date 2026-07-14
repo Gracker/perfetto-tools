@@ -23,17 +23,25 @@ scenario. Pass its name (or number/keyword) to the capture script.
   only populate on **debuggable / userdebug / eng** builds; on `user` builds fps-test
   derives fling windows from the `input` atrace category's `ACTION_DOWN/UP` slices
   (see [`../docs/spike-notes.md`](../docs/spike-notes.md)).
-- Base atrace configs target Android 10+ (API 29+). On older devices, capture falls
-  back to sideloading tracebox automatically (handled by `record_android_trace`).
-  FrameTimeline specifically needs API 31+.
+- `general`, `startup`, `cpu`, and `memory` are supported on API 29+ and run in
+  best-effort legacy mode on API 23–28. The wrapper selects one of the four
+  bundled v57.2 tracebox binaries, so legacy capture does not download a tool at
+  run time. OEM kernels may still omit requested ftrace events.
+- API 29 uses its system tracing service when running and bundled tracebox when
+  that service is stopped. API 30+ uses system Perfetto.
+- `jank` and automated FPS require FrameTimeline from Android 12 / API 31. The
+  wrapper rejects them earlier instead of returning a trace with no valid FPS
+  source. `full` warns and produces a partial trace before API 31.
 
 ## Validating a config
 
-All configs in this repo were validated by capturing a 1s trace on a real device
-(API 36). To re-validate after editing:
+All configs in this repo have API 36 real-device evidence. To run the
+capability-aware physical-device smoke plan after editing:
 
 ```bash
-./capture/capture.sh --config 02 --time 1 --no-open   # produces traces/<ts>_02_jank_frame.perfetto-trace
+.venv/bin/python tools/device_smoke.py --require-device
 ```
 
-No error and a non-empty trace file = OK.
+The plan covers `general` on API 23+, adds `cpu` on API 29+, and adds `jank` on
+API 31+. Every item requires a non-empty trace. See
+[`../docs/compatibility.md`](../docs/compatibility.md).

@@ -1,54 +1,92 @@
-# tools/ — environment setup & binaries
-
-Makes the repo self-contained: you don't need adb or trace_processor_shell
-pre-installed, and nothing is downloaded at run time on a supported host.
+# tools/ — managed runtime, diagnostics, and bundled binaries
 
 ## One-time setup
 
+Mac / Linux:
+
 ```bash
 ./tools/setup.sh
+.venv/bin/python tools/doctor.py
 ```
 
-This:
-1. **Verifies** the 5 shipped `trace_processor_shell` binaries against
-   `tools/sha256.txt` (Perfetto v57.2, ~65MB total).
-2. Resolves a working **Python 3.9+**, skipping broken PATH entries.
-3. **adb**: if the shared resolver finds an explicit override, `.bin/adb`, or a
-   PATH copy, leaves it alone. Otherwise downloads verified Google Platform-Tools
-   37.0.0 into `.bin/` and lifts macOS Gatekeeper quarantine if present.
-   (Linux-arm64 / Windows: manual install — it tells you.)
+Windows x86_64 (PowerShell):
 
-Checksum verification is mandatory. A mismatched download is deleted and setup
-fails before extraction.
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup.ps1
+.\.venv\Scripts\python.exe tools\doctor.py
+```
 
-Idempotent — safe to re-run.
+The bootstrap reads `tool-versions.env`, verifies the matching uv archive,
+creates a repository-owned CPython 3.13.14 environment from `uv.lock`, verifies
+all bundled native artifacts, and installs a verified repository-owned
+Platform-Tools 37.0.0 where Google publishes one. It does not modify global
+Python packages, SDKs, or shell profiles.
 
-## What's in here
+The first setup needs HTTPS plus native checksum/archive commands. Re-running it
+is idempotent. A checksum, version, archive-layout, or executable check fails
+closed before the managed tool is replaced.
+
+## Support boundary
+
+macOS arm64/x86_64, Linux glibc x86_64, and Windows x86_64 get a managed Python,
+packages, trace processor, and ADB. Linux glibc ARM64 gets managed analysis but
+requires `PERFETTO_TOOLS_ADB`, because Google has no Linux ARM64 Platform-Tools
+archive. See [`../docs/compatibility.md`](../docs/compatibility.md).
+
+External overrides are explicit escape hatches:
+
+```bash
+export PERFETTO_TOOLS_ADB=/custom/path/to/adb
+export PERFETTO_TOOLS_PYTHON=/custom/path/to/python  # CPython 3.10–3.14
+```
+
+They are intentionally not selected by setup from PATH. `doctor.py` labels an
+external tool non-hermetic, and an invalid explicit override fails instead of
+silently choosing something else.
+
+## Commands and manifests
 
 | File | Purpose |
 |---|---|
-| `setup.sh` | One-time environment prep (see above). |
-| `resolve.sh adb` | Prints the adb path to use. Called by every script. Precedence: `$PERFETTO_TOOLS_ADB` → `.bin/adb` → PATH. |
-| `resolve.sh python` | Prints a working Python 3.9+ path. Precedence: `$PERFETTO_TOOLS_PYTHON` → `.venv` → all PATH candidates. |
-| `sha256.txt` | SHA256 of the 5 shipped `trace_processor_shell` binaries. `awk '!/^#/ && NF' tools/sha256.txt \| shasum -a 256 -c -` to self-verify on macOS. |
-| `trace_processor_shell/` | Prebuilt Perfetto v57.2 binaries: mac-arm64, mac-amd64, linux-amd64, linux-arm64, windows-amd64.exe. |
+| `setup.sh` / `setup.ps1` | Native verified bootstrap for Unix / Windows |
+| `setup_runtime.py` | Shared post-bootstrap Python/package/artifact/ADB checks |
+| `tool-versions.env` | uv, Python, Platform-Tools versions, URLs, and SHA256 pins |
+| `resolve.sh` | Explicit override → repository-managed tool → compatible PATH fallback |
+| `doctor.py` | Human/JSON host and optional device readiness (`--device --feature fps`) |
+| `check_updates.py` | Stable upstream/content drift checker; Canary is informational |
+| `device_smoke.py` | API-aware one-second physical-device capture plan |
+| `sha256.txt` | Checksums for 5 trace processors and 4 Android tracebox binaries |
+| `trace_processor_shell/` | Local Perfetto v57.2 analysis binaries |
+| `tracebox/` | Local Perfetto v57.2 API 23–28/API 29 fallback binaries |
 
-## How trace_processor_shell is wired in
-
-`fps-test/_tp_shell_patch.py` (auto-imported as `sitecustomize` when
-`PYTHONPATH` includes `fps-test/`, which `run_fps_test.sh` sets) monkeypatches
-the `perfetto` pip package's `PLATFORM_DELEGATE` so it returns the local binary
-instead of downloading. `compute_fps.py` itself is unchanged. If the local
-binary is missing or the platform doesn't match, it falls back to the pip
-package's normal download — so analysis never hard-fails.
-
-Install the matching Python SQL client with
-`python -m pip install -r requirements.txt`. The native binary does not come
-from the network at run time.
-
-## Overriding adb
+Verify every bundled artifact on macOS:
 
 ```bash
-export PERFETTO_TOOLS_ADB=/custom/path/to/adb   # highest precedence
-export PERFETTO_TOOLS_PYTHON=/custom/path/to/python
+awk '!/^#/ && NF' tools/sha256.txt | shasum -a 256 -c -
 ```
+
+## Local trace processing
+
+`fps-test/sitecustomize.py` imports the single implementation in
+`fps-test/_tp_shell_patch.py`; `compute_fps.py` also installs that delegate
+explicitly. The delegate selects the host binary from `sha256.txt`, verifies it,
+and fails with setup guidance if it is absent or modified. It never calls the
+Perfetto package's network download fallback.
+
+## Device and update checks
+
+`doctor.py` distinguishes `PASS`, `WARN`, `FAIL`, and `NOT AVAILABLE`. An absent
+optional device is not a pass; `--device` makes it required. Examples:
+
+```bash
+.venv/bin/python tools/doctor.py --json
+.venv/bin/python tools/doctor.py --device --feature general
+.venv/bin/python tools/doctor.py --device --feature fps
+.venv/bin/python tools/device_smoke.py --require-device
+```
+
+`check_updates.py --check` queries authoritative PyPI, GitHub, Android
+repository, and Perfetto raw-content endpoints. It fails on stable version or
+record-helper content drift. The scheduled Tool drift workflow runs this outside
+normal push/PR verification so mutable upstream state cannot break a source
+commit nondeterministically.

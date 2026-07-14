@@ -1,5 +1,8 @@
 # Perfetto Tools — 设计文档
 
+> 原始历史设计。下面的依赖与下载建议不再代表当前实现；当前边界见
+> `docs/compatibility.md` 和 2026-07-14 runtime-hardening 设计。
+
 > **Historical baseline:** This was the original design. Current tool pins,
 > capture modes, and verification rules are defined by the
 > [2026-07-13 modernization design](2026-07-13-perfetto-tools-modernization-design.md).

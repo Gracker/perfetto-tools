@@ -3,10 +3,11 @@ repo:  https://github.com/google/perfetto
 commit: 96c76d5ad9a352a216577082de11fed9fa68e561
 tool_version: v57.2
 snapshot_date: 2026-07-14
+sha256: 377178a17bb87272e46616ad0e7b5814ea09037ba0a2ee55bf9c242d592b1559
 
 To update:
   curl -fL https://raw.githubusercontent.com/google/perfetto/main/tools/record_android_trace \
     -o official/record_android_trace
   chmod +x official/record_android_trace
-  # then refresh the commit hash and date in this file
+  # then refresh the commit hash, date, and SHA256 in this file
   # (get the hash from: curl -fsSL https://api.github.com/repos/google/perfetto/commits/main)

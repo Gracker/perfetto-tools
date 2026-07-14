@@ -1,5 +1,9 @@
 # Perfetto Tools Modernization Implementation Plan
 
+> Historical completed plan, superseded by the 2026-07-14 runtime-hardening
+> plan. Old Python/setup/version text is retained as execution history; use
+> `docs/compatibility.md` for current requirements.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Update Perfetto Tools to the current verified toolchain and provide a supported Perfetto replacement for legacy Systrace capture commands.

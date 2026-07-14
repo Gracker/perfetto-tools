@@ -460,34 +460,34 @@ Expected: all tests pass and both workflows parse.
 - Consumes: the implemented host/Android contract and current upstream evidence.
 - Produces: one authoritative compatibility matrix and setup/troubleshooting flow with no stronger claim than executable evidence supports.
 
-- [ ] **Step 1: Write the authoritative host/Android capability matrix**
+- [x] **Step 1: Write the authoritative host/Android capability matrix**
 
 Document self-contained, external-ADB, analysis-only, Unix-only, best-effort,
 and unsupported cells. Include API 23-28 tracebox, API 29 service fallback,
 API 31 FrameTimeline, Android 14 SurfaceFlinger latency, user-build input fallback,
 and OEM ftrace limitations.
 
-- [ ] **Step 2: Replace manual environment setup with native one-command setup**
+- [x] **Step 2: Replace manual environment setup with native one-command setup**
 
 README starts with `./tools/setup.sh` on Unix and
 `powershell -ExecutionPolicy Bypass -File tools\setup.ps1` on Windows, followed
 by `tools/doctor.py`. Explain that first setup needs network and a physical
 device/USB authorization can never be bundled.
 
-- [ ] **Step 3: Correct offline and platform claims**
+- [x] **Step 3: Correct offline and platform claims**
 
 State that runtime is offline after setup on fully supported hosts, legacy
 Android tracebox is bundled, Linux ARM64 capture needs external ADB, Windows
 does not support Bash FPS/Simpleperf orchestration, and explicit overrides are
 non-hermetic escape hatches.
 
-- [ ] **Step 4: Refresh upstream metadata without pretending unrelated commits changed the script**
+- [x] **Step 4: Refresh upstream metadata without pretending unrelated commits changed the script**
 
 Record the latest inspected `main` commit and the unchanged record-helper SHA in
 `official/VERSION`; keep Perfetto tool version v57.2 and snapshot date
 2026-07-14. Tests verify both commit format and content hash.
 
-- [ ] **Step 5: Scan for stale or contradictory instructions**
+- [x] **Step 5: Scan for stale or contradictory instructions**
 
 Run:
 

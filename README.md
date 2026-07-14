@@ -3,30 +3,40 @@
 A consolidated toolkit for capturing [Perfetto](https://perfetto.dev/) traces on
 Android, plus Simpleperf capture and automated swipe-based FPS testing.
 
-**Pinned and offline-ready**: Perfetto v57.2 `trace_processor_shell` binaries ship
-in the repo, `record_android_trace` is pinned to an inspected upstream commit,
-and `adb` is installed from verified Platform-Tools 37.0.0 archives when missing.
+**Pinned and reproducible**: setup creates a repository-owned Python environment,
+installs verified Platform-Tools 37.0.0 on supported hosts, and verifies the
+bundled Perfetto v57.2 trace processors and legacy Android tracebox binaries.
 
 ---
 
 ## 5-minute start
 
+Mac / Linux:
+
 ```bash
-# 1. Create an environment, install the pinned client, verify host tools
-"$(./tools/resolve.sh python)" -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
 ./tools/setup.sh
+.venv/bin/python tools/doctor.py
 
-# 2. Plug in a device, enable USB debugging, confirm it's seen
-adb devices                   # should list one device
+# Plug in a device, enable USB debugging, and authorize this computer.
+.venv/bin/python tools/doctor.py --device --feature general
 
-# 3. Capture a 10-second trace (Ctrl+C stops early — perfetto keeps what it got)
+# Capture a 10-second trace (Ctrl+C stops early; Perfetto preserves the trace).
 ./capture/capture.sh --config general --time 10
-#    → writes traces/<timestamp>_general.perfetto-trace and opens it in your browser
-#    Windows: capture\capture.bat --config general --time 10
 ```
 
-That's capture done. To measure FPS while scrolling:
+Windows x86_64 (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\setup.ps1
+.\.venv\Scripts\python.exe tools\doctor.py
+capture\capture.bat --config general --time 10
+```
+
+The first setup needs HTTPS. Normal capture/analysis uses only repository-owned
+tools afterward; add `--no-open` when the browser/UI must also stay offline.
+A physical device and its USB authorization cannot be bundled.
+
+To measure FPS while scrolling on Mac/Linux (Android 12 / API 31+):
 
 ```bash
 # Launch your app, navigate to the screen you want to test, then:
@@ -118,7 +128,7 @@ from the two modes are intentionally not mixed.
 
 | Directory | Purpose |
 |---|---|
-| [`tools/`](tools/) | Verified setup, adb/Python resolution, Perfetto v57.2 `trace_processor_shell` (5 platforms). |
+| [`tools/`](tools/) | Native bootstrap, doctor/update/device-smoke commands, verified ADB, 5 trace processors, and 4 Android tracebox binaries. |
 | [`official/`](official/) | Pinned snapshot of Google's `record_android_trace`. |
 | [`capture/`](capture/) | Cross-platform one-shot capture (`.bat` for Windows, `.sh` for Mac/Linux). |
 | [`configs/`](configs/) | 6 prebuilt trace configs for common scenarios. |
@@ -127,25 +137,30 @@ from the two modes are intentionally not mixed.
 
 ---
 
-## Requirements
+## Requirements and support boundary
 
-- **adb**: auto-installed by `./tools/setup.sh` if not on PATH. Override with
-  `PERFETTO_TOOLS_ADB=/path/to/adb`.
-- **Python 3.9+**. Override discovery with
-  `PERFETTO_TOOLS_PYTHON=/path/to/python` when needed.
-- **`python -m pip install -r requirements.txt`** — installs the matching
-  `perfetto==0.57.2` SQL client. Native trace processing stays local.
-- An **Android device** connected via USB with debugging enabled.
+- On macOS arm64/x86_64, Linux glibc x86_64, and Windows x86_64, use the native
+  setup command above; do not preinstall Python, pip packages, or ADB.
+- Linux glibc ARM64 analysis is managed, but capture requires an explicit
+  `PERFETTO_TOOLS_ADB` because Google publishes no Platform-Tools archive for
+  that host.
+- External Python 3.10–3.14 and ADB overrides remain available for unusual
+  environments, but they are non-hermetic escape hatches and doctor reports them.
+- A connected Android 6+ device with USB debugging is required for capture.
+  FrameTimeline jank/FPS specifically requires Android 12 / API 31+.
+- Windows supports core Perfetto capture and local Python analysis. The Bash FPS
+  and Simpleperf orchestration scripts are Mac/Linux only.
+
+See the authoritative [compatibility matrix](docs/compatibility.md).
 
 ---
 
 ## Troubleshooting
 
-**`adb devices` shows nothing / `unauthorized`**
-Enable Developer Options → USB debugging, then tap "Allow" on the device prompt.
-
-**`capture.sh` says "no device connected"**
-Same as above, or pass `-s <serial>` if you have several devices.
+**Doctor/capture reports no device, `unauthorized`, `offline`, or permissions**
+The messages distinguish these states. Connect and authorize a device, reconnect
+an offline device, or configure Linux USB/udev access. With several ready
+devices, pass `--serial <id>`.
 
 **`compute_fps.py` says "No FrameTimeline frames in trace"**
 FrameTimeline needs Android 12 (API 31)+. If you're on 31+ and still see this, the
@@ -172,27 +187,30 @@ instead. See [`simpleperf/README.md`](simpleperf/README.md).
 ## Testing
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest tests/ -v
+./tools/setup.sh
+.venv/bin/python -m pytest tests/ -v
 
 git ls-files -z '*.sh' | xargs -0 bash -n
 git ls-files -z '*.sh' | xargs -0 shellcheck
 
-./tools/setup.sh
+.venv/bin/python tools/doctor.py
+.venv/bin/python tools/check_updates.py --check
 ./capture/capture.sh --list-configs
 ```
 
-Device-dependent flows (capture, simpleperf, fps-test end-to-end) are verified
-manually. The repo was developed and acceptance-tested on an OPPO P0110 (API 36,
-`user` build). See [`docs/spike-notes.md`](docs/spike-notes.md) for the on-device
-schema findings that shaped the FPS code.
+CI bootstraps and verifies Ubuntu, macOS, and Windows. Physical-device capture is
+available through `tools/device_smoke.py`; without a device it reports
+`NOT AVAILABLE` rather than passing. The repository's existing real-device
+findings are recorded in [`docs/spike-notes.md`](docs/spike-notes.md).
 
 ---
 
 ## Design docs
 
-- [Current modernization design](docs/superpowers/specs/2026-07-13-perfetto-tools-modernization-design.md)
-- [Current implementation plan](docs/superpowers/plans/2026-07-13-perfetto-tools-modernization.md)
+- [Compatibility matrix](docs/compatibility.md)
+- [Current runtime-hardening design](docs/superpowers/specs/2026-07-14-runtime-compatibility-hardening-design.md)
+- [Current implementation plan](docs/superpowers/plans/2026-07-14-runtime-compatibility-hardening.md)
+- [Previous modernization design](docs/superpowers/specs/2026-07-13-perfetto-tools-modernization-design.md)
 - [Original design spec](docs/superpowers/specs/2026-06-17-perfetto-tools-design.md)
 - [Original implementation plan](docs/superpowers/plans/2026-06-17-perfetto-tools.md)
 - [Systrace migration](docs/systrace-migration.md)
