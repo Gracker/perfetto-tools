@@ -56,6 +56,12 @@ def test_official_snapshot_is_pinned_to_latest_inspected_main_commit():
     assert _sha256(REPO_ROOT / "official" / "record_android_trace") == RECORD_HELPER_SHA256
 
 
+def test_official_snapshot_keeps_lf_bytes_on_windows_checkout():
+    attributes = (REPO_ROOT / ".gitattributes").read_text()
+
+    assert "official/record_android_trace text eol=lf" in attributes
+
+
 def test_official_script_embeds_matching_perfetto_prebuilts():
     script = (REPO_ROOT / "official" / "record_android_trace").read_text()
 

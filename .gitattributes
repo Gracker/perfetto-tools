@@ -1,0 +1,3 @@
+# Preserve the pinned upstream helper's exact bytes on every checkout while
+# keeping it reviewable as text.
+official/record_android_trace text eol=lf
