@@ -1,4 +1,7 @@
+import pytest
+
 from tools.check_updates import (
+    UpdateCheckFailure,
     compare_platform_tools,
     compare_record_helper,
     compare_version,
@@ -62,3 +65,7 @@ def test_platform_tools_repository_parser_separates_channels():
 
     assert parse_platform_tools_versions(xml) == ("37.0.0", "37.0.1")
 
+
+def test_platform_tools_repository_parser_wraps_malformed_xml():
+    with pytest.raises(UpdateCheckFailure, match="Android repository XML"):
+        parse_platform_tools_versions("<not-closed>")

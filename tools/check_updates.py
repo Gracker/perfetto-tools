@@ -18,6 +18,8 @@ from typing import Callable, Sequence
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 PYPI_PERFETTO = "https://pypi.org/pypi/perfetto/json"
+PYPI_PROTOBUF = "https://pypi.org/pypi/protobuf/json"
+PYPI_PYTEST = "https://pypi.org/pypi/pytest/json"
 UV_LATEST = "https://api.github.com/repos/astral-sh/uv/releases/latest"
 ANDROID_REPOSITORY = "https://dl.google.com/android/repository/repository2-1.xml"
 PERFETTO_COMMIT = "https://api.github.com/repos/google/perfetto/commits/main"
@@ -94,7 +96,10 @@ def _child(element: ET.Element, name: str) -> ET.Element | None:
 
 
 def parse_platform_tools_versions(repository_xml: str) -> tuple[str, str]:
-    root = ET.fromstring(repository_xml)
+    try:
+        root = ET.fromstring(repository_xml)
+    except ET.ParseError as exc:
+        raise UpdateCheckFailure(f"Invalid Android repository XML: {exc}") from exc
     channels = {
         element.attrib.get("id", ""): (element.text or "").strip().lower()
         for element in root.iter()
@@ -111,7 +116,12 @@ def parse_platform_tools_versions(repository_xml: str) -> tuple[str, str]:
         parts = []
         for name in ("major", "minor", "micro"):
             field = _child(revision, name)
-            parts.append(int((field.text if field is not None else "0") or "0"))
+            try:
+                parts.append(int((field.text if field is not None else "0") or "0"))
+            except ValueError as exc:
+                raise UpdateCheckFailure(
+                    f"Invalid Android repository XML revision field {name}"
+                ) from exc
         version = ".".join(str(part) for part in parts)
         channel_ref = _child(package, "channelRef")
         channel_id = channel_ref.attrib.get("ref", "channel-0") if channel_ref is not None else "channel-0"
@@ -165,8 +175,12 @@ def _official_metadata(path: Path) -> dict[str, str]:
 def _project_pin(path: Path, package: str) -> str:
     project = tomllib.loads(path.read_text(encoding="utf-8"))
     prefix = f"{package}=="
+    dependencies = [
+        *project["project"].get("dependencies", []),
+        *project.get("dependency-groups", {}).get("dev", []),
+    ]
     dependency = next(
-        (item for item in project["project"]["dependencies"] if item.startswith(prefix)),
+        (item for item in dependencies if item.startswith(prefix)),
         None,
     )
     if dependency is None:
@@ -182,6 +196,8 @@ def collect_update_statuses(
     versions = _env_manifest(repo_root / "tools" / "tool-versions.env")
     official = _official_metadata(repo_root / "official" / "VERSION")
     perfetto = _json(PYPI_PERFETTO, fetch)["info"]["version"]
+    protobuf = _json(PYPI_PROTOBUF, fetch)["info"]["version"]
+    pytest = _json(PYPI_PYTEST, fetch)["info"]["version"]
     uv = _json(UV_LATEST, fetch)["tag_name"].lstrip("v")
     repository_xml = fetch(ANDROID_REPOSITORY).decode("utf-8")
     stable_pt, canary_pt = parse_platform_tools_versions(repository_xml)
@@ -189,9 +205,13 @@ def collect_update_statuses(
     remote_commit = _json(PERFETTO_COMMIT, fetch)["sha"]
     local_record = (repo_root / "official" / "record_android_trace").read_bytes()
     local_perfetto = _project_pin(repo_root / "pyproject.toml", "perfetto")
+    local_protobuf = _project_pin(repo_root / "pyproject.toml", "protobuf")
+    local_pytest = _project_pin(repo_root / "pyproject.toml", "pytest")
 
     return [
         compare_version("Perfetto Python package", local_perfetto, perfetto),
+        compare_version("protobuf", local_protobuf, protobuf),
+        compare_version("pytest", local_pytest, pytest),
         compare_version("uv", versions["UV_VERSION"], uv),
         compare_platform_tools(versions["PLATFORM_TOOLS_VERSION"], stable_pt, canary_pt),
         compare_record_helper(

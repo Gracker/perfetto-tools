@@ -18,7 +18,7 @@ PATTERN="${SCRIPT_DIR}/swipe_pattern.txt"
 GFXDUMP="${SCRIPT_DIR}/dump_gfxinfo.sh"
 DOCTOR="${REPO_ROOT}/tools/doctor.py"
 OUT_DIR="${REPO_ROOT}/traces"
-STARTUP_TIMEOUT=20
+STARTUP_TIMEOUT=30
 
 PYTHON="$("${REPO_ROOT}/tools/resolve.sh" python)"
 
@@ -49,7 +49,7 @@ CAPTURE_PID=""
 
 cleanup() {
   local exit_status=$?
-  trap - EXIT INT TERM
+  trap - EXIT
   if [[ -n "${CAPTURE_PID}" ]] && kill -0 "${CAPTURE_PID}" 2>/dev/null; then
     echo "[fps-test] stopping background tracer..." >&2
     kill -TERM "${CAPTURE_PID}" 2>/dev/null || true
@@ -57,7 +57,9 @@ cleanup() {
   fi
   return "${exit_status}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "[fps-test] duration   : ${DURATION}s"
 echo "[fps-test] output     : ${TRACE}"
@@ -110,7 +112,7 @@ while read -r dir x1 y1 x2 y2 dur gap _rest; do
   echo "[fps-test] swipe ${dir} ..."
   "${ADB}" shell input swipe "${x1}" "${y1}" "${x2}" "${y2}" "${dur}" </dev/null
   start_ns="$(device_now_ns)"
-  sleep "$("${PYTHON}" -c "print(${gap}/1000.0)")"
+  sleep "$("${PYTHON}" -c 'import sys; print(float(sys.argv[1]) / 1000.0)' "${gap}")"
   end_ns="$(device_now_ns)"
   echo "${start_ns} ${end_ns}" >>"${SWIPE_LOG}"
 done <"${PATTERN}"

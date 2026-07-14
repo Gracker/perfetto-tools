@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from perfetto_tools.artifacts import ArtifactFailure, trace_processor_relative_path
+from perfetto_tools.artifacts import (
+    ArtifactFailure,
+    read_checksum_manifest,
+    trace_processor_relative_path,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -38,6 +42,15 @@ def test_missing_trace_processor_fails_closed_with_setup_guidance(tmp_path):
             machine="arm64",
             sys_platform="darwin",
         )
+
+
+def test_malformed_artifact_manifest_is_an_actionable_failure(tmp_path):
+    manifest = tmp_path / "tools" / "sha256.txt"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("not-a-checksum-entry\n")
+
+    with pytest.raises(ArtifactFailure, match="Malformed checksum manifest"):
+        read_checksum_manifest(tmp_path)
 
 
 def test_sitecustomize_is_only_a_delegate_import_and_install():

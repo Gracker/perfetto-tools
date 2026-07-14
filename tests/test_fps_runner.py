@@ -32,5 +32,7 @@ def test_fps_runner_waits_for_real_trace_readiness_without_fixed_sleep():
 def test_fps_runner_reaps_background_capture_on_every_exit_path():
     source = RUNNER.read_text()
 
-    assert "trap cleanup EXIT INT TERM" in source
+    assert "trap cleanup EXIT" in source
+    assert "trap 'exit 130' INT" in source
+    assert "trap 'exit 143' TERM" in source
     assert 'wait "${CAPTURE_PID}"' in source

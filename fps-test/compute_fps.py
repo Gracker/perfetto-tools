@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import sys
 
-if sys.version_info < (3, 10):
+if sys.version_info < (3, 10) or sys.version_info >= (3, 15):
     sys.exit(
         "compute_fps.py requires Python 3.10-3.14 "
         f"(running {sys.version.split()[0]}). Run the repository setup first."

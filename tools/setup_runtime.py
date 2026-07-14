@@ -27,6 +27,7 @@ from perfetto_tools.artifacts import (  # noqa: E402
     ArtifactFailure,
     sha256_file,
     verify_bundled_artifacts as verify_artifacts,
+    verify_official_helper,
 )
 
 
@@ -62,7 +63,7 @@ def verify_python_environment(versions: dict[str, str]) -> None:
             "Managed Python version mismatch: expected "
             f"{versions['PYTHON_VERSION']}, got {platform.python_version()}"
         )
-    expected_packages = {"perfetto": "0.57.2", "protobuf": "6.33.6"}
+    expected_packages = {"perfetto": "0.57.2", "protobuf": "7.35.1"}
     for package, expected in expected_packages.items():
         try:
             actual = importlib.metadata.version(package)
@@ -155,14 +156,67 @@ def _platform_tools_source_is_current(directory: Path, expected: str) -> bool:
         return False
 
 
+def _remove_managed_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def activate_managed_directory(staging: Path, managed: Path, backup: Path) -> None:
+    """Atomically activate staging and restore the previous install on failure."""
+    try:
+        _remove_managed_path(backup)
+    except OSError as exc:
+        raise SetupError(
+            f"Could not clear the previous Platform-Tools backup {backup}; "
+            f"the current install was not changed: {exc}"
+        ) from exc
+
+    had_previous = managed.exists() or managed.is_symlink()
+    if had_previous:
+        try:
+            managed.rename(backup)
+        except OSError as exc:
+            raise SetupError(
+                "Could not preserve the current Platform-Tools before activation; "
+                f"the current install was not changed: {exc}"
+            ) from exc
+    try:
+        staging.rename(managed)
+    except OSError as exc:
+        if had_previous and backup.exists() and not managed.exists():
+            try:
+                backup.rename(managed)
+            except OSError as restore_exc:
+                raise SetupError(
+                    f"Could not activate Platform-Tools ({exc}); restoring the "
+                    f"previous install also failed ({restore_exc})."
+                ) from restore_exc
+            raise SetupError(
+                f"Could not activate Platform-Tools; the previous install was restored: {exc}"
+            ) from exc
+        raise SetupError(
+            "Could not activate Platform-Tools; no previous install was changed: "
+            f"{exc}"
+        ) from exc
+    try:
+        _remove_managed_path(backup)
+    except OSError as exc:
+        raise SetupError(
+            f"Platform-Tools was activated, but its backup could not be removed: {exc}"
+        ) from exc
+
+
 def _install_platform_tools(
     managed_dir: Path,
     url: str,
     expected_sha256: str,
     expected_version: str,
 ) -> Path:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="platform-tools-", dir=BIN_DIR) as temp_name:
+    bin_dir = managed_dir.parent
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="platform-tools-", dir=bin_dir) as temp_name:
         temp_dir = Path(temp_name)
         archive = temp_dir / "platform-tools.zip"
         _download(url, archive)
@@ -185,15 +239,11 @@ def _install_platform_tools(
             raise SetupError(
                 f"Platform-Tools archive did not report expected version {expected_version}"
             )
-        staging = BIN_DIR / ".platform-tools.new"
-        backup = BIN_DIR / ".platform-tools.old"
+        staging = bin_dir / ".platform-tools.new"
+        backup = bin_dir / ".platform-tools.old"
         shutil.rmtree(staging, ignore_errors=True)
-        shutil.rmtree(backup, ignore_errors=True)
         shutil.move(str(candidate), staging)
-        if managed_dir.exists():
-            managed_dir.rename(backup)
-        staging.rename(managed_dir)
-        shutil.rmtree(backup, ignore_errors=True)
+        activate_managed_directory(staging, managed_dir, backup)
     return adb_executable(managed_dir)
 
 
@@ -250,16 +300,22 @@ def main(argv: list[str] | None = None) -> int:
         versions = read_env_manifest()
         verify_python_environment(versions)
         verified = verify_bundled_artifacts()
+        helper = verify_official_helper(REPO_ROOT)
         adb = ensure_platform_tools(versions=versions)
         _ensure_unix_adb_link(adb)
-    except SetupError as exc:
+        adb_release = adb_version(adb) if adb is not None else None
+    except (ArtifactFailure, SetupError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 3
+    except (OSError, zipfile.BadZipFile) as exc:
+        print(f"ERROR: host setup operation failed: {exc}", file=sys.stderr)
+        return 3
     print(f"[setup] Python: {platform.python_version()} ({Path(sys.executable)})")
-    print("[setup] perfetto: 0.57.2; protobuf: 6.33.6")
+    print("[setup] perfetto: 0.57.2; protobuf: 7.35.1")
     print(f"[setup] verified bundled artifacts: {len(verified)}")
+    print(f"[setup] official helper: {helper}")
     if adb is not None:
-        print(f"[setup] adb: {adb} ({adb_version(adb)})")
+        print(f"[setup] adb: {adb} ({adb_release})")
     print("[setup] done")
     return 0
 

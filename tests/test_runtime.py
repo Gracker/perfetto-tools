@@ -8,6 +8,7 @@ from perfetto_tools.runtime import (
     DeviceInfo,
     RuntimeFailure,
     check_feature_compatibility,
+    list_adb_devices,
     parse_adb_devices,
     probe_device,
     resolve_adb,
@@ -24,6 +25,21 @@ def test_resolve_adb_finds_managed_platform_tools_layout(tmp_path):
     adb.chmod(adb.stat().st_mode | stat.S_IXUSR)
 
     assert resolve_adb(tmp_path, environment={}, which=lambda _name: None) == str(adb)
+
+
+def test_resolve_adb_normalizes_relative_explicit_override(tmp_path, monkeypatch):
+    adb = tmp_path / "custom-adb"
+    adb.write_bytes(b"adb")
+    adb.chmod(adb.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.chdir(tmp_path)
+
+    resolved = resolve_adb(
+        tmp_path / "repo",
+        environment={"PERFETTO_TOOLS_ADB": "./custom-adb"},
+        which=lambda _name: None,
+    )
+
+    assert resolved == str(adb.resolve())
 
 
 def test_parse_adb_devices_preserves_non_ready_states():
@@ -123,6 +139,16 @@ def test_run_adb_converts_nonzero_result_to_device_failure():
 
     with pytest.raises(RuntimeFailure, match="device offline") as exc:
         run_adb(["shell", "getprop"], adb="adb", runner=failed_runner)
+
+    assert exc.value.exit_code == 4
+
+
+def test_list_adb_devices_rejects_malformed_success_output():
+    def runner(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 0, stdout="unexpected output\n", stderr="")
+
+    with pytest.raises(RuntimeFailure, match="unexpected output") as exc:
+        list_adb_devices("adb", runner=runner)
 
     assert exc.value.exit_code == 4
 

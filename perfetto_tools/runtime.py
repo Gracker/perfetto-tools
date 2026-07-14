@@ -57,11 +57,12 @@ def resolve_adb(
     environment = os.environ if environment is None else environment
     override = environment.get("PERFETTO_TOOLS_ADB")
     if override:
-        if Path(override).is_file() and os.access(override, os.X_OK):
-            return override
+        candidate = Path(override).expanduser().resolve()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
         raise RuntimeFailure(
             "PERFETTO_TOOLS_ADB does not point to an executable file: "
-            f"{override}",
+            f"{candidate}",
             3,
         )
 
@@ -162,6 +163,15 @@ def list_adb_devices(
     result = run_adb(
         ["devices", "-l"], adb=adb, timeout=timeout, runner=runner
     )
+    if not any(
+        line.strip() == "List of devices attached"
+        for line in result.stdout.splitlines()
+    ):
+        detail = result.stdout.strip() or "empty output"
+        raise RuntimeFailure(
+            f"ADB devices returned unexpected output: {detail}",
+            4,
+        )
     return parse_adb_devices(result.stdout)
 
 

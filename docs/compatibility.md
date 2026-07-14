@@ -17,7 +17,7 @@ or every OEM kernel tracepoint can be bundled.
 | Linux musl, 32-bit hosts, other architectures | — | Unsupported | Unsupported | Unsupported | Unsupported | No managed runtime/artifact contract |
 
 The managed toolchain is CPython 3.13.14, uv 0.11.28, Perfetto Python 0.57.2,
-protobuf 6.33.6, Perfetto native tools v57.2, and Android Platform-Tools
+protobuf 7.35.1, pytest 9.1.1, Perfetto native tools v57.2, and Android Platform-Tools
 37.0.0. Explicit `PERFETTO_TOOLS_PYTHON` and `PERFETTO_TOOLS_ADB` values are
 escape hatches; doctor reports an external tool as non-hermetic.
 
@@ -84,6 +84,6 @@ device plan; without a device it reports `NOT AVAILABLE`, while
 `--require-device` makes that condition fail.
 
 Mutable upstream status is intentionally separate: the weekly/manual Tool drift
-workflow checks PyPI Perfetto, uv releases, stable/Canary Platform-Tools, and the
-content of Perfetto's `record_android_trace`. Canary availability is
+workflow checks the PyPI direct dependencies, uv releases, stable/Canary
+Platform-Tools, and the content of Perfetto's `record_android_trace`. Canary availability is
 informational; stable or helper-content drift requires maintenance.

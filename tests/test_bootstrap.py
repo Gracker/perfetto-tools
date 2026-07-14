@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERSIONS = REPO_ROOT / "tools" / "tool-versions.env"
@@ -71,6 +73,14 @@ def test_default_runtime_setup_does_not_accept_path_adb():
     assert "ensure_platform_tools" in setup_runtime
 
 
+def test_setup_and_doctor_verify_the_pinned_official_helper():
+    setup_runtime = (REPO_ROOT / "tools" / "setup_runtime.py").read_text()
+    doctor = (REPO_ROOT / "tools" / "doctor.py").read_text()
+
+    assert "verify_official_helper" in setup_runtime
+    assert "verify_official_helper" in doctor
+
+
 def test_python_project_and_requirements_have_matching_direct_pins():
     project = (REPO_ROOT / "pyproject.toml").read_text()
     runtime = (REPO_ROOT / "requirements.txt").read_text().splitlines()
@@ -78,10 +88,10 @@ def test_python_project_and_requirements_have_matching_direct_pins():
 
     assert 'requires-python = ">=3.10,<3.15"' in project
     assert '"perfetto==0.57.2"' in project
-    assert '"protobuf==6.33.6"' in project
-    assert '"pytest==8.4.2"' in project
-    assert runtime == ["perfetto==0.57.2", "protobuf==6.33.6"]
-    assert development == ["-r requirements.txt", "pytest==8.4.2"]
+    assert '"protobuf==7.35.1"' in project
+    assert '"pytest==9.1.1"' in project
+    assert runtime == ["perfetto==0.57.2", "protobuf==7.35.1"]
+    assert development == ["-r requirements.txt", "pytest==9.1.1"]
 
 
 def test_windows_capture_prefers_repository_virtual_environment():
@@ -90,3 +100,97 @@ def test_windows_capture_prefers_repository_virtual_environment():
     launcher = batch.index("where py")
 
     assert managed < launcher
+
+
+def test_python_entrypoints_enforce_the_documented_upper_bound():
+    capture = (REPO_ROOT / "capture" / "perfetto_capture.py").read_text()
+    compute = (REPO_ROOT / "fps-test" / "compute_fps.py").read_text()
+
+    assert "sys.version_info >= (3, 15)" in capture
+    assert "sys.version_info >= (3, 15)" in compute
+
+
+def test_platform_tools_activation_restores_previous_install_on_failure(
+    tmp_path, monkeypatch
+):
+    from tools.setup_runtime import SetupError, activate_managed_directory
+
+    managed = tmp_path / "platform-tools"
+    staging = tmp_path / ".platform-tools.new"
+    backup = tmp_path / ".platform-tools.old"
+    managed.mkdir()
+    staging.mkdir()
+    (managed / "marker").write_text("old")
+    (staging / "marker").write_text("new")
+    original_rename = Path.rename
+
+    def fail_staging(self, target):
+        if self == staging:
+            raise OSError("activation failed")
+        return original_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", fail_staging)
+
+    with pytest.raises(SetupError, match="activate"):
+        activate_managed_directory(staging, managed, backup)
+
+    assert (managed / "marker").read_text() == "old"
+
+
+def test_platform_tools_activation_wraps_backup_failure_without_touching_install(
+    tmp_path, monkeypatch
+):
+    from tools.setup_runtime import SetupError, activate_managed_directory
+
+    managed = tmp_path / "platform-tools"
+    staging = tmp_path / ".platform-tools.new"
+    backup = tmp_path / ".platform-tools.old"
+    managed.mkdir()
+    staging.mkdir()
+    (managed / "marker").write_text("old")
+    (staging / "marker").write_text("new")
+    original_rename = Path.rename
+
+    def fail_managed(self, target):
+        if self == managed:
+            raise OSError("backup failed")
+        return original_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", fail_managed)
+
+    with pytest.raises(SetupError, match="preserve the current Platform-Tools"):
+        activate_managed_directory(staging, managed, backup)
+
+    assert (managed / "marker").read_text() == "old"
+    assert (staging / "marker").read_text() == "new"
+
+
+def test_first_platform_tools_activation_failure_does_not_claim_a_restore(
+    tmp_path, monkeypatch
+):
+    from tools.setup_runtime import SetupError, activate_managed_directory
+
+    managed = tmp_path / "platform-tools"
+    staging = tmp_path / ".platform-tools.new"
+    backup = tmp_path / ".platform-tools.old"
+    staging.mkdir()
+
+    def fail_staging(self, target):
+        raise OSError("activation failed")
+
+    monkeypatch.setattr(Path, "rename", fail_staging)
+
+    with pytest.raises(SetupError, match="no previous install was changed"):
+        activate_managed_directory(staging, managed, backup)
+
+
+def test_setup_main_translates_host_filesystem_errors(capsys, monkeypatch):
+    import tools.setup_runtime as setup_runtime
+
+    def fail_manifest():
+        raise OSError("manifest is unreadable")
+
+    monkeypatch.setattr(setup_runtime, "read_env_manifest", fail_manifest)
+
+    assert setup_runtime.main([]) == 3
+    assert "host setup operation failed: manifest is unreadable" in capsys.readouterr().err

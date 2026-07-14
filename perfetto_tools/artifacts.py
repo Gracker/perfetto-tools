@@ -35,8 +35,20 @@ def read_checksum_manifest(repo_root: Path) -> dict[Path, str]:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        expected, relative = line.split(maxsplit=1)
-        checksums[Path(relative)] = expected
+        fields = line.split(maxsplit=1)
+        if len(fields) != 2:
+            raise ArtifactFailure(f"Malformed checksum manifest line: {raw_line!r}")
+        expected, relative_text = fields
+        relative = Path(relative_text)
+        if (
+            len(expected) != 64
+            or any(char not in "0123456789abcdef" for char in expected)
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or relative in checksums
+        ):
+            raise ArtifactFailure(f"Malformed checksum manifest line: {raw_line!r}")
+        checksums[relative] = expected
     if not checksums:
         raise ArtifactFailure("Bundled checksum manifest has no artifact entries")
     return checksums
@@ -59,6 +71,34 @@ def verify_bundled_artifacts(repo_root: Path) -> list[Path]:
             )
         verified.append(artifact)
     return verified
+
+
+def verify_official_helper(repo_root: Path) -> Path:
+    metadata_path = repo_root / "official" / "VERSION"
+    try:
+        metadata_lines = metadata_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ArtifactFailure(
+            f"Official helper metadata is unavailable: {exc}. Restore the repository files."
+        ) from exc
+    metadata = {}
+    for raw_line in metadata_lines:
+        if ":" in raw_line:
+            key, value = raw_line.split(":", 1)
+            metadata[key.strip()] = value.strip()
+    expected = metadata.get("sha256", "")
+    if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+        raise ArtifactFailure("official/VERSION has no valid lowercase SHA256 pin")
+    helper = repo_root / "official" / "record_android_trace"
+    if not helper.is_file():
+        raise ArtifactFailure("Pinned official/record_android_trace is missing")
+    actual = sha256_file(helper)
+    if actual != expected:
+        raise ArtifactFailure(
+            "Pinned official/record_android_trace checksum mismatch; restore the "
+            "repository file and rerun setup."
+        )
+    return helper
 
 
 def trace_processor_relative_path(

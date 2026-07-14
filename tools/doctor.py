@@ -25,6 +25,7 @@ from perfetto_tools.artifacts import (  # noqa: E402
     ArtifactFailure,
     verified_trace_processor,
     verify_bundled_artifacts,
+    verify_official_helper,
 )
 from perfetto_tools.runtime import (  # noqa: E402
     AdbDevice,
@@ -40,7 +41,7 @@ from perfetto_tools.runtime import (  # noqa: E402
 
 
 EXPECTED_PYTHON = "3.13.14"
-EXPECTED_PACKAGES = {"perfetto": "0.57.2", "protobuf": "6.33.6"}
+EXPECTED_PACKAGES = {"perfetto": "0.57.2", "protobuf": "7.35.1"}
 EXPECTED_ADB = "37.0.0"
 EXPECTED_PERFETTO = "57.2"
 
@@ -107,6 +108,7 @@ def _check_packages(checks: list[Check], versions: Mapping[str, str]) -> None:
 def _check_artifacts(checks: list[Check], repo_root: Path) -> None:
     try:
         verified = verify_bundled_artifacts(repo_root)
+        helper = verify_official_helper(repo_root)
         shell = verified_trace_processor(repo_root)
         result = subprocess.run(
             [str(shell), "--version"],
@@ -123,6 +125,7 @@ def _check_artifacts(checks: list[Check], repo_root: Path) -> None:
         checks.append(Check("bundled artifacts", "FAIL", str(exc), 3))
         return
     checks.append(Check("bundled artifacts", "PASS", f"{len(verified)} checksums"))
+    checks.append(Check("official helper", "PASS", str(helper)))
     checks.append(Check("trace processor", "PASS", str(shell)))
 
 
@@ -287,4 +290,3 @@ def main(
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

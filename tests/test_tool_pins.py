@@ -70,7 +70,7 @@ def test_python_requirements_match_bundled_perfetto_version():
 
     assert f"perfetto=={PERFETTO_PACKAGE_VERSION}" in runtime
     assert "-r requirements.txt" in development
-    assert "pytest==8.4.2" in development
+    assert "pytest==9.1.1" in development
 
 
 def test_every_bundled_trace_processor_matches_recorded_sha256():

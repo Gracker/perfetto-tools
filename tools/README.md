@@ -85,7 +85,7 @@ optional device is not a pass; `--device` makes it required. Examples:
 .venv/bin/python tools/device_smoke.py --require-device
 ```
 
-`check_updates.py --check` queries authoritative PyPI, GitHub, Android
+`check_updates.py --check` queries authoritative PyPI package, GitHub, Android
 repository, and Perfetto raw-content endpoints. It fails on stable version or
 record-helper content drift. The scheduled Tool drift workflow runs this outside
 normal push/PR verification so mutable upstream state cannot break a source

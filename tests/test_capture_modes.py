@@ -50,7 +50,7 @@ def test_normalize_lightweight_duration(value, expected):
     assert normalize_lightweight_duration(value) == expected
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "ten", "10ms", ""])
+@pytest.mark.parametrize("value", ["0", "-1", "ten", "10ms", "", "9" * 400])
 def test_normalize_lightweight_duration_rejects_invalid_values(value):
     with pytest.raises(ConfigError, match="positive number"):
         normalize_lightweight_duration(value)
@@ -169,7 +169,9 @@ def test_main_preserves_runtime_failure_exit_code(capsys, monkeypatch):
     assert "ERROR: device is offline; reconnect it" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("value", ["", "32", "-1mb", "32kb", "nanmb", "0gb"])
+@pytest.mark.parametrize(
+    "value", ["", "32", "-1mb", "32kb", "nanmb", "0gb", f"{'9' * 400}mb"]
+)
 def test_buffer_rejects_invalid_values(value):
     with pytest.raises(ConfigError, match="positive.*mb or gb"):
         normalize_buffer_size(value)
@@ -188,7 +190,9 @@ def test_category_rejects_empty_whitespace_or_control_characters(value):
         validate_category(value)
 
 
-@pytest.mark.parametrize("value", ["", "com.example bad", "-bad", "bad/actor"])
+@pytest.mark.parametrize(
+    "value", ["", "com.example bad", "-bad", "bad/actor", ".", "com..bad", "com.bad."]
+)
 def test_app_rejects_invalid_identifier(value):
     with pytest.raises(ConfigError, match="app"):
         validate_app(value)

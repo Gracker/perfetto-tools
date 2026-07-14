@@ -15,7 +15,7 @@ import tempfile
 import time
 from pathlib import Path
 
-if sys.version_info < (3, 10):
+if sys.version_info < (3, 10) or sys.version_info >= (3, 15):
     sys.exit(
         "perfetto_capture.py requires Python 3.10-3.14 "
         f"(running {sys.version.split()[0]}). Run the repository setup first."
@@ -46,7 +46,8 @@ def normalize_lightweight_duration(value):
     """Return an official-helper duration, defaulting unitless values to seconds."""
     value = str(value).strip().lower()
     match = re.fullmatch(r"(\d+(?:\.\d+)?)([smh]?)", value)
-    if not match or float(match.group(1)) <= 0:
+    numeric = float(match.group(1)) if match else 0
+    if not match or not math.isfinite(numeric) or numeric <= 0:
         raise ConfigError(
             f"--time must be a positive number with optional s/m/h unit, got {value!r}"
         )
@@ -58,7 +59,8 @@ def normalize_buffer_size(value):
     """Return a normalized positive Perfetto ring-buffer size."""
     normalized = str(value).strip().lower()
     match = re.fullmatch(r"(\d+(?:\.\d+)?)(mb|gb)", normalized)
-    if not match or float(match.group(1)) <= 0:
+    numeric = float(match.group(1)) if match else 0
+    if not match or not math.isfinite(numeric) or numeric <= 0:
         raise ConfigError(
             f"--buffer must be a positive number followed by mb or gb, got {value!r}"
         )
@@ -79,7 +81,10 @@ def validate_category(value):
 def validate_app(value):
     """Validate an atrace app/package identifier or the supported `*` wildcard."""
     value = str(value)
-    if value != "*" and not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.:$-]*", value):
+    segment = r"[A-Za-z_][A-Za-z0-9_]*"
+    if value != "*" and not re.fullmatch(
+        rf"{segment}(?:\.{segment})*(?::{segment})?", value
+    ):
         raise ConfigError(
             f"Invalid --app value {value!r}; use an Android app identifier or '*'"
         )
@@ -289,8 +294,6 @@ def validate_capture_mode_args(args, config_path):
             args.buffer = normalize_buffer_size(args.buffer)
         args.categories = [validate_category(value) for value in args.categories]
         args.app = [validate_app(value) for value in args.app]
-    if args.output:
-        args.output = validate_output_path(args.output)
 
 
 def validate_list_mode_args(args):
@@ -434,6 +437,9 @@ def main(argv=None):
     except RuntimeFailure as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return e.exit_code
+    except OSError as e:
+        print(f"ERROR: host filesystem/process operation failed: {e}", file=sys.stderr)
+        return 3
 
 
 if __name__ == "__main__":

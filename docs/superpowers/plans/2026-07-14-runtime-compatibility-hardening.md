@@ -6,7 +6,7 @@
 
 **Architecture:** Minimal shell/PowerShell bootstraps download a verified uv binary and use it to create a repository-owned Python 3.13.14 environment from `uv.lock`. A shared `perfetto_tools.runtime` module owns ADB/device/platform behavior for capture and doctor commands; bundled Android tracebox artifacts cover legacy devices. CI validates the same boundary on Linux, macOS, and Windows, while mutable upstream drift is checked separately.
 
-**Tech Stack:** CPython 3.13.14 managed by uv 0.11.28, Python standard library, Bash, PowerShell, Perfetto v57.2, Platform-Tools 37.0.0, pytest 8.4.2, GitHub Actions.
+**Tech Stack:** CPython 3.13.14 managed by uv 0.11.28, Python standard library, Bash, PowerShell, Perfetto v57.2, Platform-Tools 37.0.0, pytest 9.1.1, GitHub Actions.
 
 ## Global Constraints
 
@@ -80,11 +80,11 @@ version = "0.1.0"
 requires-python = ">=3.10,<3.15"
 dependencies = [
   "perfetto==0.57.2",
-  "protobuf==6.33.6",
+  "protobuf==7.35.1",
 ]
 
 [dependency-groups]
-dev = ["pytest==8.4.2"]
+dev = ["pytest==9.1.1"]
 ```
 
 Generate `uv.lock` with the pinned uv executable. Keep requirements files as exact pip-compatible projections of the same direct versions.
@@ -321,7 +321,7 @@ Expected: all capture tests and all nine artifact checks pass.
 
 ```python
 def test_doctor_reports_wrong_perfetto_version_as_failure():
-    checks = collect_checks(package_versions={"perfetto": "0.56.0", "protobuf": "6.33.6"})
+    checks = collect_checks(package_versions={"perfetto": "0.56.0", "protobuf": "7.35.1"})
     assert any(c.name == "perfetto package" and c.status == "FAIL" for c in checks)
 
 def test_doctor_without_device_reports_not_available_not_pass():
@@ -507,7 +507,7 @@ the managed path, and `_tp_shell_patch` references describe the actual import.
 - Consumes: all prior task deliverables and the repository-defined verification commands.
 - Produces: a clean, pushed `main` whose remote CI and local HEAD agree.
 
-- [ ] **Step 1: Run the complete repository verification from the managed runtime**
+- [x] **Step 1: Run the complete repository verification from the managed runtime**
 
 Run:
 
@@ -524,25 +524,48 @@ ruby -e 'require "yaml"; Dir[".github/workflows/*.yml"].each { |f| YAML.load_fil
 git diff --check
 ```
 
-- [ ] **Step 2: Run physical-device automation or record exact unavailability**
+Execution note: the managed setup completed with CPython 3.13.14, Perfetto
+0.57.2, protobuf 7.35.1, Platform-Tools 37.0.0, nine verified native artifacts,
+and the pinned official helper. All 175 tests, Bash syntax, ShellCheck, checksums,
+doctor, config/help smoke checks, Ruby YAML parsing, upstream drift checks, and
+`git diff --check` passed on macOS arm64.
+
+- [x] **Step 2: Run physical-device automation or record exact unavailability**
 
 Run: `.venv/bin/python tools/device_smoke.py --require-device`
 
 Expected on the current host: exit 4 with `NOT AVAILABLE` if no authorized device
 is attached. Do not report Android capture as verified in that case.
 
-- [ ] **Step 3: Perform the required behavior-preserving simplification review**
+Execution note: the command exited 4 with `[NOT AVAILABLE] Android device: none
+connected/authorized`; no physical-device capture is claimed.
+
+- [x] **Step 3: Perform the required behavior-preserving simplification review**
 
 Try `/simplify`, a repository-defined simplifier, then `code-simplifier`. If none
 is available, manually review only changed code for duplicate version parsing,
 duplicated platform mapping, dead fallbacks, and avoidable exception swallowing;
 run `git diff --check` and record the fallback.
 
-- [ ] **Step 4: Audit every design requirement against direct evidence**
+Execution note: `/simplify`, a repository simplifier, and `code-simplifier` were
+not available. Manual review removed duplicated output validation and patch
+implementations, centralized artifact/platform mapping, and added regression
+coverage for rollback, malformed manifests/ADB/XML, relative overrides, process
+cleanup, Python bounds, and numeric/app input edges. `git diff --check` passed.
+
+- [x] **Step 4: Audit every design requirement against direct evidence**
 
 Map host setup, platform matrix, Android matrix, automation, exception behavior,
 and environment independence to tests/commands. Any missing or indirect evidence
 keeps the task open.
+
+Evidence map: bootstrap/install boundaries are covered by `test_bootstrap` plus
+real setup; device/API/errors by `test_runtime` and capture tests; offline native
+selection by artifact/tracebox/trace-processor tests; FPS readiness by runner
+tests; upstream/device automation by update/device-smoke tests; the host matrix
+and workflow isolation by workflow contract tests and Ruby YAML parsing. Physical
+capture remains explicitly `NOT AVAILABLE` on the current host until a device is
+attached; cross-host execution remains pending remote Verify.
 
 - [ ] **Step 5: Stage explicit paths, commit, and push**
 

@@ -10,7 +10,7 @@ def _check(checks, name):
 
 def test_doctor_reports_wrong_perfetto_version_as_failure():
     checks = collect_checks(
-        package_versions={"perfetto": "0.56.0", "protobuf": "6.33.6"},
+        package_versions={"perfetto": "0.56.0", "protobuf": "7.35.1"},
         devices=[],
     )
 
@@ -62,4 +62,3 @@ def test_doctor_json_output_has_stable_check_shape(capsys):
     assert payload == [
         {"name": "demo", "status": "PASS", "detail": "ok", "exit_code": 0}
     ]
-
