@@ -26,7 +26,7 @@ PATCH_PATH = REPO_ROOT / "fps-test" / "_tp_shell_patch.py"
     ],
 )
 def test_trace_processor_platform_mapping(system, machine, sys_platform, expected):
-    assert str(trace_processor_relative_path(system, machine, sys_platform)) == expected
+    assert trace_processor_relative_path(system, machine, sys_platform).as_posix() == expected
 
 
 def test_missing_trace_processor_fails_closed_with_setup_guidance(tmp_path):

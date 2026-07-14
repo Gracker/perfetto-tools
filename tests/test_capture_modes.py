@@ -123,13 +123,19 @@ def test_config_mode_rejects_lightweight_only_flags():
         build_official_command(args, output="trace.perfetto-trace", config_path="config.pbtx")
 
 
-def test_official_environment_exposes_resolved_adb_to_upstream_script():
+def test_official_environment_exposes_resolved_adb_to_upstream_script(tmp_path):
+    adb = tmp_path / "platform-tools" / "adb"
+    original_path = os.pathsep.join(("host-bin", "fallback-bin"))
     environment = build_official_environment(
-        "/custom/android/platform-tools/adb",
-        {"PATH": "/usr/bin:/bin", "KEEP": "value"},
+        str(adb),
+        {"PATH": original_path, "KEEP": "value"},
     )
 
-    assert environment["PATH"] == "/custom/android/platform-tools:/usr/bin:/bin"
+    assert environment["PATH"].split(os.pathsep) == [
+        str(adb.parent.resolve()),
+        "host-bin",
+        "fallback-bin",
+    ]
     assert environment["KEEP"] == "value"
 
 
