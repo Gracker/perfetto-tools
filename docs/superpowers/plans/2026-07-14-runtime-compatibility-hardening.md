@@ -140,7 +140,7 @@ Expected: all tests/checks pass; setup reports Python 3.13.14, Perfetto 0.57.2, 
 - Consumes: an ADB path, optional serial, command timeout, selected config/mode, and device command output.
 - Produces: `AdbDevice`, `DeviceInfo`, `RuntimeFailure`, `list_adb_devices()`, `select_device()`, `probe_device()`, `tracebox_for_device()`, and `check_feature_compatibility()`.
 
-- [ ] **Step 1: Write failing device parser and failure tests**
+- [x] **Step 1: Write failing device parser and failure tests**
 
 ```python
 def test_parse_adb_devices_preserves_unauthorized_state():
@@ -158,13 +158,13 @@ def test_run_adb_converts_timeout_to_device_failure():
     assert exc.value.exit_code == 4
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run: `python -m pytest tests/test_runtime.py -v`
 
 Expected: import failure because `perfetto_tools.runtime` does not exist.
 
-- [ ] **Step 3: Implement typed runtime errors and exact device parsing**
+- [x] **Step 3: Implement typed runtime errors and exact device parsing**
 
 ```python
 @dataclass(frozen=True)
@@ -189,7 +189,7 @@ class RuntimeFailure(Exception):
 
 Handle missing executable, permission failure, non-zero daemon result, malformed output, timeout, unauthorized, offline, no-permissions, zero devices, and multiple devices with separate messages.
 
-- [ ] **Step 4: Write failing Android compatibility tests**
+- [x] **Step 4: Write failing Android compatibility tests**
 
 ```python
 @pytest.mark.parametrize(("api", "abi", "expected"), [
@@ -209,15 +209,15 @@ def test_jank_rejected_before_android_12():
     assert exc.value.exit_code == 5
 ```
 
-- [ ] **Step 5: Implement probe, tracebox selection, and feature gates**
+- [x] **Step 5: Implement probe, tracebox selection, and feature gates**
 
 Probe API, ABI, build type, and `init.svc.traced` in one bounded ADB shell call. API 23-28 selects bundled tracebox; API 29 selects it only when traced is not running. Unsupported ABI is an exit-5 failure. Jank/FPS below API 31 fails; full below API 31 returns a warning.
 
-- [ ] **Step 6: Delegate capture's ADB boundary to the shared module**
+- [x] **Step 6: Delegate capture's ADB boundary to the shared module**
 
 Remove the local `_resolve_adb` and substring-based device parser. Preserve `build_official_environment()` only as the bridge that exposes the selected ADB to the unmodified upstream helper.
 
-- [ ] **Step 7: Run focused and existing capture tests**
+- [x] **Step 7: Run focused and existing capture tests**
 
 Run: `python -m pytest tests/test_runtime.py tests/test_capture_modes.py tests/test_config_resolver.py -v`
 

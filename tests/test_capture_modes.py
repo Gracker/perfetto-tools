@@ -4,6 +4,8 @@ import sys
 
 import pytest
 
+from perfetto_tools.runtime import AdbDevice, DeviceInfo, RuntimeFailure
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "capture"))
 
 from perfetto_capture import (  # noqa: E402
@@ -11,7 +13,9 @@ from perfetto_capture import (  # noqa: E402
     build_official_environment,
     build_official_command,
     build_parser,
+    main,
     normalize_lightweight_duration,
+    prepare_device,
 )
 
 
@@ -123,3 +127,39 @@ def test_official_environment_exposes_resolved_adb_to_upstream_script():
 
     assert environment["PATH"] == "/custom/android/platform-tools:/usr/bin:/bin"
     assert environment["KEEP"] == "value"
+
+
+def test_prepare_device_uses_shared_runtime_and_pins_selected_serial(monkeypatch):
+    import perfetto_capture
+
+    info = DeviceInfo("SERIAL", 31, "arm64-v8a", "user", "running")
+    monkeypatch.setattr(perfetto_capture, "resolve_adb", lambda _root: "/managed/adb")
+    monkeypatch.setattr(
+        perfetto_capture,
+        "list_adb_devices",
+        lambda _adb: [AdbDevice("SERIAL", "device", "model:Pixel")],
+    )
+    monkeypatch.setattr(perfetto_capture, "probe_device", lambda _adb, _serial: info)
+    monkeypatch.setattr(
+        perfetto_capture,
+        "check_feature_compatibility",
+        lambda feature, device: [f"{feature}:{device.api_level}"],
+    )
+    args = _args()
+
+    adb, selected, warnings = prepare_device(args, "general")
+
+    assert (adb, selected, warnings) == ("/managed/adb", info, ["general:31"])
+    assert args.serial == "SERIAL"
+
+
+def test_main_preserves_runtime_failure_exit_code(capsys, monkeypatch):
+    import perfetto_capture
+
+    def fail(_args):
+        raise RuntimeFailure("device is offline; reconnect it", 4)
+
+    monkeypatch.setattr(perfetto_capture, "run_capture", fail)
+
+    assert main(["--config", "general"]) == 4
+    assert "ERROR: device is offline; reconnect it" in capsys.readouterr().err

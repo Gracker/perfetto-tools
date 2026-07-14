@@ -15,12 +15,26 @@ import tempfile
 import time
 from pathlib import Path
 
-if sys.version_info < (3, 9):
+if sys.version_info < (3, 10):
     sys.exit(
-        "perfetto_capture.py requires Python 3.9+ "
-        f"(running {sys.version.split()[0]}). "
-        "The script uses str.removesuffix(), which was added in Python 3.9."
+        "perfetto_capture.py requires Python 3.10-3.14 "
+        f"(running {sys.version.split()[0]}). Run the repository setup first."
     )
+
+# Directory layout: capture/ sits next to configs/, official/, and the package.
+_HERE = Path(__file__).resolve().parent
+_REPO_ROOT = _HERE.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from perfetto_tools.runtime import (  # noqa: E402
+    RuntimeFailure,
+    check_feature_compatibility,
+    list_adb_devices,
+    probe_device,
+    resolve_adb,
+    select_device,
+)
 
 
 class ConfigError(Exception):
@@ -39,9 +53,6 @@ def normalize_lightweight_duration(value):
     return f"{number}{unit or 's'}"
 
 
-# Directory layout: capture/ sits next to configs/ and official/.
-_HERE = Path(__file__).resolve().parent
-_REPO_ROOT = _HERE.parent
 _CONFIGS_DIR = _REPO_ROOT / "configs"
 _OFFICIAL = _REPO_ROOT / "official" / "record_android_trace"
 _TRACES_DIR = _REPO_ROOT / "traces"
@@ -150,52 +161,6 @@ def materialize_config(config_path, seconds):
     return tmp
 
 
-def _resolve_adb():
-    """Return the adb executable path, mirroring tools/resolve.sh's precedence.
-
-    Order: $PERFETTO_TOOLS_ADB -> <repo>/.bin/adb -> PATH lookup. Returns the
-    bare string 'adb' as a last resort so the caller's FileNotFoundError handler
-    still fires with a helpful message if nothing is installed.
-    """
-    env = os.environ.get("PERFETTO_TOOLS_ADB")
-    if env and os.path.isfile(env) and os.access(env, os.X_OK):
-        return env
-    bin_adb = _REPO_ROOT / ".bin" / "adb"
-    if bin_adb.is_file() and os.access(bin_adb, os.X_OK):
-        return str(bin_adb)
-    return "adb"
-
-
-def check_adb_device(serial=None, adb=None):
-    """Ensure exactly one usable device (or the one named by --serial)."""
-    adb = adb or _resolve_adb()
-    try:
-        out = subprocess.run(
-            [adb, "devices"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip().splitlines()[1:]
-    except FileNotFoundError:
-        sys.exit(
-            "ERROR: 'adb' not found. Options:\n"
-            "  - run './tools/setup.sh' to install it into .bin/\n"
-            "  - set PERFETTO_TOOLS_ADB=/path/to/adb\n"
-            "  - put Android Platform Tools on PATH\n"
-            "  https://developer.android.com/studio/releases/platform-tools"
-        )
-
-    devices = [ln.split()[0] for ln in out if ln.strip() and "device" in ln]
-    if serial:
-        if serial not in devices:
-            sys.exit(f"ERROR: device --serial {serial} not connected/authorized.\n"
-                     f"adb devices says: {devices or 'none'}")
-        return serial
-    if len(devices) == 0:
-        sys.exit("ERROR: no device connected. Run `adb devices` and authorize.")
-    if len(devices) > 1:
-        sys.exit(f"ERROR: multiple devices ({devices}). Pass --serial <id>.")
-    return devices[0]
-
-
 def build_official_environment(adb_path, base_env=None):
     """Expose the repository-resolved adb to the unmodified upstream helper."""
     environment = dict(os.environ if base_env is None else base_env)
@@ -207,6 +172,25 @@ def build_official_environment(adb_path, base_env=None):
             [adb_dir, *(entry for entry in path_entries if entry != adb_dir)]
         )
     return environment
+
+
+def prepare_device(args, feature):
+    """Select, probe, and capability-check one device before capture."""
+    adb_path = resolve_adb(_REPO_ROOT)
+    selected = select_device(list_adb_devices(adb_path), args.serial)
+    info = probe_device(adb_path, selected.serial)
+    warnings = check_feature_compatibility(feature, info)
+
+    # Always pin the selected serial in the upstream command. This prevents a
+    # second device attached after preflight from changing capture behavior.
+    args.serial = selected.serial
+    print(
+        f"[capture] device : {info.serial} "
+        f"(Android API {info.api_level}, {info.abi}, {info.build_type})"
+    )
+    for warning in warnings:
+        print(f"[capture] WARNING: {warning}", file=sys.stderr)
+    return adb_path, info, warnings
 
 
 def build_official_command(args, output, config_path=None):
@@ -267,8 +251,7 @@ def run_capture(args):
         return 0
 
     if args.list_categories:
-        adb_path = _resolve_adb()
-        check_adb_device(args.serial, adb_path)
+        adb_path, _info, _warnings = prepare_device(args, "categories")
         cmd = [sys.executable, str(_OFFICIAL), "--list"]
         if args.serial:
             cmd += ["-s", args.serial]
@@ -299,8 +282,8 @@ def run_capture(args):
         print(f"[capture] duration: {duration}")
     print(f"[capture] output : {out}")
 
-    adb_path = _resolve_adb()
-    check_adb_device(args.serial, adb_path)
+    feature = Path(config_path).stem if config_path else "categories"
+    adb_path, _info, _warnings = prepare_device(args, feature)
 
     # --time is honored by rewriting duration_ms into a temp config, because
     # record_android_trace ignores -t when -c is given. Falls through to the
@@ -368,6 +351,9 @@ def main(argv=None):
     except ConfigError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
+    except RuntimeFailure as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return e.exit_code
 
 
 if __name__ == "__main__":
