@@ -1,1 +1,2 @@
 perfetto==0.57.2
+protobuf==6.33.6

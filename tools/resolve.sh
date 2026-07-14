@@ -19,7 +19,7 @@ TOOL="${1:?usage: resolve.sh <tool>}"
 python_is_usable() {
   local candidate="$1"
   [[ -x "${candidate}" ]] && "${candidate}" -c \
-    'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' \
+    'import sys; raise SystemExit(0 if (3, 10) <= sys.version_info[:2] < (3, 15) else 1)' \
     >/dev/null 2>&1
 }
 
@@ -51,7 +51,7 @@ case "${TOOL}" in
         echo "${PERFETTO_TOOLS_PYTHON}"
         exit 0
       fi
-      echo "ERROR: PERFETTO_TOOLS_PYTHON does not run Python 3.9+:" >&2
+      echo "ERROR: PERFETTO_TOOLS_PYTHON must run Python 3.10-3.14:" >&2
       echo "       ${PERFETTO_TOOLS_PYTHON}" >&2
       exit 1
     fi
@@ -79,8 +79,8 @@ case "${TOOL}" in
       fi
     done < <(type -aP python3 2>/dev/null; type -aP python 2>/dev/null)
 
-    echo "ERROR: no working Python 3.9+ interpreter found." >&2
-    echo "       Install Python, create .venv/, or set" >&2
+    echo "ERROR: no working Python 3.10-3.14 interpreter found." >&2
+    echo "       Run './tools/setup.sh', or set" >&2
     echo "       PERFETTO_TOOLS_PYTHON=/path/to/python." >&2
     exit 1
     ;;

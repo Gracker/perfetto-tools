@@ -13,6 +13,7 @@ PLATFORM_TOOLS_VERSION = "37.0.0"
 PLATFORM_TOOLS_HASHES = {
     "darwin": "094a1395683c509fd4d48667da0d8b5ef4d42b2abfcd29f2e8149e2f989357c7",
     "linux": "198ae156ab285fa555987219af237b31102fefe8b9d2bc274708a8d4f2865a07",
+    "windows": "4fe305812db074cea32903a489d061eb4454cbc90a49e8fea677f4b7af764918",
 }
 
 
@@ -31,6 +32,15 @@ def _sha256(path):
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _tool_versions():
+    values = {}
+    for line in (REPO_ROOT / "tools" / "tool-versions.env").read_text().splitlines():
+        if line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
 
 
 def test_official_snapshot_is_pinned_to_latest_inspected_main_commit():
@@ -99,17 +109,20 @@ def test_host_trace_processor_reports_pinned_version():
 
 
 def test_platform_tools_pin_uses_verified_stable_archives_and_fails_closed():
-    setup = (REPO_ROOT / "tools" / "setup.sh").read_text()
+    versions = _tool_versions()
+    setup_runtime = (REPO_ROOT / "tools" / "setup_runtime.py").read_text()
 
-    assert f'PT_VERSION="{PLATFORM_TOOLS_VERSION}"' in setup
+    assert versions["PLATFORM_TOOLS_VERSION"] == PLATFORM_TOOLS_VERSION
     for expected in PLATFORM_TOOLS_HASHES.values():
-        assert expected in setup
-    assert "Proceeding anyway" not in setup
-    assert 'rm -f "${TMP_ZIP}"' in setup
+        assert expected in versions.values()
+    assert "Proceeding anyway" not in setup_runtime
+    assert "checksum mismatch" in setup_runtime
 
 
-def test_setup_honors_the_shared_adb_resolver_before_downloading():
+def test_setup_delegates_host_tool_installation_to_shared_runtime():
     setup = (REPO_ROOT / "tools" / "setup.sh").read_text()
+    setup_runtime = (REPO_ROOT / "tools" / "setup_runtime.py").read_text()
 
-    assert 'if ADB="$("${SCRIPT_DIR}/resolve.sh" adb 2>/dev/null)"; then' in setup
-    assert "if command -v adb" not in setup
+    assert 'setup_runtime.py" "$@"' in setup
+    assert "ensure_platform_tools" in setup_runtime
+    assert 'shutil.which("adb")' not in setup_runtime

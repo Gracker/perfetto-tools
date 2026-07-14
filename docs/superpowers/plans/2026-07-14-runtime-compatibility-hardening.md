@@ -42,7 +42,7 @@
 - Consumes: the host OS/architecture, OS-native HTTPS/archive tools, and `tools/tool-versions.env`.
 - Produces: verified `.bin/uv/`, `.bin/python/`, `.bin/platform-tools/`, `.venv/`, and `setup_runtime.main(argv: list[str] | None) -> int`.
 
-- [ ] **Step 1: Write failing bootstrap contract tests**
+- [x] **Step 1: Write failing bootstrap contract tests**
 
 ```python
 def test_bootstrap_manifest_pins_managed_runtime():
@@ -61,17 +61,17 @@ def test_default_setup_does_not_accept_path_adb():
     assert "shutil.which(\"adb\")" not in setup
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run: `python -m pytest tests/test_bootstrap.py -v`
 
 Expected: FAIL because the manifest, PowerShell bootstrap, and shared runtime setup do not exist.
 
-- [ ] **Step 3: Add the canonical bootstrap pins**
+- [x] **Step 3: Add the canonical bootstrap pins**
 
 `tools/tool-versions.env` contains Python/uv/Platform-Tools versions, archive names, URLs, and the reviewed SHA256 values for macOS arm64/x86_64, Linux glibc arm64/x86_64, and Windows x86_64. Both bootstrap scripts read this file; neither duplicates hashes.
 
-- [ ] **Step 4: Create the locked Python project**
+- [x] **Step 4: Create the locked Python project**
 
 ```toml
 [project]
@@ -89,13 +89,13 @@ dev = ["pytest==8.4.2"]
 
 Generate `uv.lock` with the pinned uv executable. Keep requirements files as exact pip-compatible projections of the same direct versions.
 
-- [ ] **Step 5: Implement minimal verified uv bootstraps**
+- [x] **Step 5: Implement minimal verified uv bootstraps**
 
 `tools/setup.sh` detects the supported Unix host, downloads the matching uv archive, verifies it, extracts into `.bin/uv/`, sets repository-local uv cache/Python variables, and runs `uv sync --frozen --python 3.13.14`.
 
 `tools/setup.ps1` performs the equivalent steps with `Invoke-WebRequest`, `Get-FileHash`, and `Expand-Archive` on Windows x86_64.
 
-- [ ] **Step 6: Implement shared post-bootstrap setup**
+- [x] **Step 6: Implement shared post-bootstrap setup**
 
 ```python
 def ensure_platform_tools(repo_root: Path, versions: dict[str, str]) -> Path:
@@ -110,11 +110,11 @@ def verify_python_environment(expected: dict[str, str]) -> None:
 
 Extraction occurs in a temporary sibling directory and replaces the managed directory only after checksum, archive layout, source revision, and `adb version` checks succeed.
 
-- [ ] **Step 7: Make runtime entrypoints prefer the managed environment**
+- [x] **Step 7: Make runtime entrypoints prefer the managed environment**
 
 Unix resolver order becomes explicit override → `.venv/bin/python` → healthy PATH fallback. Windows capture order becomes explicit override → `.venv\Scripts\python.exe` → `py -3` → `python`. A missing setup is diagnosed, not silently hidden.
 
-- [ ] **Step 8: Run focused tests and bootstrap smokes**
+- [x] **Step 8: Run focused tests and bootstrap smokes**
 
 Run:
 
@@ -123,7 +123,7 @@ python -m pytest tests/test_bootstrap.py tests/test_python_resolver.py -v
 bash -n tools/setup.sh tools/resolve.sh
 shellcheck tools/setup.sh tools/resolve.sh
 ./tools/setup.sh
-.venv/bin/python -m pip check
+./.bin/uv/uv pip check --python .venv/bin/python
 ```
 
 Expected: all tests/checks pass; setup reports Python 3.13.14, Perfetto 0.57.2, and repo-local ADB 37.0.0 on a fully supported host.
