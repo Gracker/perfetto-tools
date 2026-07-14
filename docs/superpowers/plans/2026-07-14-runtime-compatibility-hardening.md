@@ -565,9 +565,10 @@ selection by artifact/tracebox/trace-processor tests; FPS readiness by runner
 tests; upstream/device automation by update/device-smoke tests; the host matrix
 and workflow isolation by workflow contract tests and Ruby YAML parsing. Physical
 capture remains explicitly `NOT AVAILABLE` on the current host until a device is
-attached; cross-host execution remains pending remote Verify.
+attached; cross-host execution passed the remote three-OS Verify matrix recorded
+below.
 
-- [ ] **Step 5: Stage explicit paths, commit, and push**
+- [x] **Step 5: Stage explicit paths, commit, and push**
 
 ```bash
 git add -- .github/workflows/tool-drift.yml .github/workflows/verify.yml \
@@ -590,9 +591,19 @@ git commit -m "feat: harden Perfetto runtime compatibility"
 git push origin main
 ```
 
-- [ ] **Step 6: Verify remote closure**
+Execution note: all task paths were staged explicitly and pushed to `main`.
+Concurrent remote documentation commit `2e2d250` was preserved by rebasing the
+final portability-test fix instead of forcing the branch.
+
+- [x] **Step 6: Verify remote closure**
 
 Confirm `git ls-remote origin refs/heads/main` equals local HEAD, the worktree is
 clean, and the Verify workflow for that exact SHA succeeds. If CI fails, diagnose
 the root cause, add a regression test where applicable, fix, and repeat until
 green.
+
+Execution note: remote run `29313826659` passed on macOS, Ubuntu, and Windows for
+implementation SHA `3394d1ad0e34e83027be6d3e9424ea5b0f19583e`. The two Windows
+findings were fixed at their source: the pinned helper now retains LF bytes on
+checkout, and host-matrix tests use platform-native path contracts. The final
+closure-only plan commit is also required to pass Verify before completion.
