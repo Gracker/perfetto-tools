@@ -183,7 +183,8 @@ def test_verify_workflow_covers_supported_host_families_and_native_bootstraps():
     assert "tools/doctor.py" in workflow
     assert "capture/capture.sh --list-configs" in workflow
     assert r"capture\capture.bat --list-configs" in workflow
-    assert "shellcheck" in workflow
+    assert "tools/verify.py" in workflow
+    assert r"tools\verify.py" in workflow
     assert "sha256sum --check" in workflow
 
 

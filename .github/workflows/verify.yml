@@ -33,19 +33,23 @@ jobs:
         if: runner.os != 'Windows'
         run: ./tools/setup.sh
 
+      - name: Ensure macOS ShellCheck
+        if: runner.os == 'macOS'
+        run: command -v shellcheck || brew install shellcheck
+
       - name: Bootstrap managed runtime (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\tools\setup.ps1
 
-      - name: Run Python tests (Unix)
+      - name: Verify source (Unix)
         if: runner.os != 'Windows'
-        run: .venv/bin/python -m pytest tests/ -v
+        run: .venv/bin/python tools/verify.py
 
-      - name: Run Python tests (Windows)
+      - name: Verify source (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: .\.venv\Scripts\python.exe -m pytest tests/ -v
+        run: .\.venv\Scripts\python.exe tools\verify.py
 
       - name: Run doctor and native CLI smoke (Unix)
         if: runner.os != 'Windows'
@@ -66,9 +70,7 @@ jobs:
           .\capture\capture.bat --list-configs
           .\.venv\Scripts\python.exe official/record_android_trace --help > $null
 
-      - name: Verify shell and all artifact hashes
+      - name: Verify all artifact hashes
         if: runner.os == 'Linux'
         run: |
-          git ls-files -z '*.sh' | xargs -0 bash -n
-          git ls-files -z '*.sh' | xargs -0 shellcheck
           awk '!/^#/ && NF' tools/sha256.txt | sha256sum --check -

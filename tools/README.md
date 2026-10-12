@@ -52,6 +52,7 @@ silently choosing something else.
 | `setup_runtime.py` | Shared post-bootstrap Python/package/artifact/ADB checks |
 | `tool-versions.env` | uv, Python, Platform-Tools versions, URLs, and SHA256 pins |
 | `resolve.sh` | Explicit override → repository-managed tool → compatible PATH fallback |
+| `verify.py` | Offline full Python tests and Unix tracked Bash syntax/ShellCheck |
 | `doctor.py` | Human/JSON host and optional device readiness (`--device --feature fps`) |
 | `check_updates.py` | Stable upstream/content drift checker; Canary is informational |
 | `device_smoke.py` | API-aware one-second physical-device capture plan |
@@ -72,6 +73,18 @@ awk '!/^#/ && NF' tools/sha256.txt | shasum -a 256 -c -
 explicitly. The delegate selects the host binary from `sha256.txt`, verifies it,
 and fails with setup guidance if it is absent or modified. It never calls the
 Perfetto package's network download fallback.
+
+## Source verification
+
+After initial setup, `.venv/bin/python tools/verify.py` is the local source gate.
+Windows uses `.\.venv\Scripts\python.exe tools\verify.py`. It runs all Python
+tests (including artifact integrity and native processor version); Unix also
+requires Bash, Git and ShellCheck to check all tracked shell scripts. It returns
+nonzero on missing tools or failed checks, with no package installation, upstream
+queries or device capture. CI uses this same entry on each supported host family.
+
+Re-run setup and doctor when runtime/dependency pins change. Device readiness and
+upstream currency are independent evidence, covered by the commands below.
 
 ## Device and update checks
 

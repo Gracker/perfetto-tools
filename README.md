@@ -205,32 +205,43 @@ instead. See [`simpleperf/README.md`](simpleperf/README.md).
 
 ## Testing
 
+Run setup once for a new checkout, and again when managed dependency or tool pins
+change. It needs HTTPS; it is not part of every source verification:
+
 ```bash
 ./tools/setup.sh
-.venv/bin/python -m pytest tests/ -v
-
-git ls-files -z '*.sh' | xargs -0 bash -n
-git ls-files -z '*.sh' | xargs -0 shellcheck
-
-.venv/bin/python tools/doctor.py
-.venv/bin/python tools/check_updates.py --check
-./capture/capture.sh --list-configs
 ```
 
-CI bootstraps and verifies Ubuntu, macOS, and Windows. Physical-device capture is
-available through `tools/device_smoke.py`; without a device it reports
-`NOT AVAILABLE` rather than passing. The repository's existing real-device
-findings are recorded in [`docs/spike-notes.md`](docs/spike-notes.md).
+For routine source changes, use the existing managed runtime without querying
+upstream versions or connecting a device:
+
+```bash
+.venv/bin/python tools/verify.py
+```
+
+Windows uses `.\.venv\Scripts\python.exe tools\verify.py`. This runs the complete
+Python suite, including bundled artifact hashes and the host trace processor.
+Unix also checks every tracked Bash script's syntax and runs ShellCheck; install
+ShellCheck first. Missing required tools or a failed check returns a nonzero exit.
+The source gate keeps the complete suite; no reduced test tier is needed.
+
+Run `.venv/bin/python tools/doctor.py` after bootstrap or host runtime changes.
+Device capture changes also require `tools/device_smoke.py --require-device` on
+an authorized Android device; an absent device is `NOT AVAILABLE`, not a pass.
+`tools/check_updates.py --check` is a separate online maintenance check, run by
+the scheduled/manual Tool drift workflow. Upstream drift does not invalidate
+otherwise reproducible source tests.
+
+CI bootstraps Ubuntu, macOS, and Windows, runs the same source entry, then
+separately verifies native doctor/CLI readiness. See
+[`tools/README.md`](tools/README.md) for commands and
+[`docs/spike-notes.md`](docs/spike-notes.md) for existing device findings.
 
 ---
 
-## Design docs
+## Maintainer references
 
 - [Compatibility matrix](docs/compatibility.md)
-- [Current runtime-hardening design](docs/superpowers/specs/2026-07-14-runtime-compatibility-hardening-design.md)
-- [Current implementation plan](docs/superpowers/plans/2026-07-14-runtime-compatibility-hardening.md)
-- [Previous modernization design](docs/superpowers/specs/2026-07-13-perfetto-tools-modernization-design.md)
-- [Original design spec](docs/superpowers/specs/2026-06-17-perfetto-tools-design.md)
-- [Original implementation plan](docs/superpowers/plans/2026-06-17-perfetto-tools.md)
+- [Runtime, device and update commands](tools/README.md)
 - [Systrace migration](docs/systrace-migration.md)
-- [On-device spike notes](docs/spike-notes.md)
+- [On-device findings](docs/spike-notes.md)

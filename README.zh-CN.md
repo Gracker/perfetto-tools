@@ -25,4 +25,20 @@ Perfetto Tools 是一套面向 Android 的 Perfetto Trace 采集工具，同时�
 ## 完整文档
 
 安装步骤、命令参数、版本矩阵与故障排查目前以 [English README](README.md) 为准。
-本页保留中文项目入口和统一生态导航，后续完整中文文档可在不影响工具实现的情况下继续补充。
+
+## 本地验证
+
+新 checkout 或受管工具/依赖版本变化时运行一次 setup。日常改源码使用已有环境：
+
+```bash
+.venv/bin/python tools/verify.py
+```
+
+Windows 使用 `.\.venv\Scripts\python.exe tools\verify.py`。入口执行完整 Python
+测试；Unix 还逐个检查仓库跟踪的 Bash 脚本并运行 ShellCheck，缺工具或失败会返回非零。
+正常源码验证不查询上游版本，也不要求连接设备。
+
+bootstrap 或主机运行时变化后另跑 `tools/doctor.py`；采集行为变化另跑
+`tools/device_smoke.py --require-device`，没有授权设备应记录 `NOT AVAILABLE`。
+联网的 `tools/check_updates.py --check` 留给工具版本维护和 scheduled/manual drift
+检查。完整命令和边界见 [tools/README](tools/README.md)。
